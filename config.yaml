@@ -1,0 +1,52 @@
+name: "Flush & Rush"
+description: "Gamification fuer das Gaeste-WC: Sitzungen tracken, claimen und im Leaderboard anzeigen."
+version: "0.3.0"
+slug: "flush-and-rush"
+url: "https://example.com/flush-and-rush"
+init: false
+startup: services
+boot: auto
+arch:
+  - aarch64
+  - amd64
+
+ingress: true
+ingress_port: 8099
+panel_title: "Flush & Rush"
+panel_icon: "mdi:toilet"
+
+homeassistant_api: true
+
+ports:
+  8099/tcp: 8080
+
+options:
+  sensor_entity_id: "binary_sensor.klodeckel"
+  sensor_inverted: false
+  # Timer-Farbe wechselt zu Gelb/Rot ab dieser verstrichenen Zeit (Sekunden). Start ist immer Gruen.
+  yellow_threshold_sec: 120
+  red_threshold_sec: 300
+  # Fade-Transition zwischen Timer und Nachricht (Millisekunden).
+  fade_duration_ms: 600
+  # Wie lange eine Nachricht sichtbar bleibt, bevor wieder zum Timer gefadet wird (Sekunden).
+  message_duration_sec: 8
+  # Uebergangs-Animation zwischen Timer und Nachricht: fade, slide oder zoom.
+  transition_style: "fade"
+  # Nachrichten, die ab der jeweiligen verstrichenen Zeit (Sekunden) einmalig eingeblendet werden.
+  messages:
+    - time_sec: 60
+      text: "Alles gut, nimm dir Zeit"
+    - time_sec: 300
+      text: "Alles in Ordnung da drin?"
+
+schema:
+  sensor_entity_id: str
+  sensor_inverted: bool
+  yellow_threshold_sec: int(0,86400)
+  red_threshold_sec: int(0,86400)
+  fade_duration_ms: int(100,5000)
+  message_duration_sec: int(1,300)
+  transition_style: list(fade|slide|zoom)
+  messages:
+    - time_sec: int(0,86400)
+      text: str

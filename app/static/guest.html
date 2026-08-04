@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="de" data-transition="fade">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>flush_and_rush</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #060b14;
+      --text: #f4f7fb;
+      --muted: #a8b3c4;
+      --idle: #7dd3fc;
+      --green: #34d399;
+      --yellow: #fbbf24;
+      --red: #f87171;
+      --timer-color: var(--idle);
+      --fade-ms: 600ms;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at top, rgba(125, 211, 252, 0.18), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(99, 102, 241, 0.12), transparent 22%),
+        var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+    }
+
+    main {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      gap: 18px;
+      place-items: center;
+      align-content: center;
+      text-align: center;
+      padding: 20px;
+    }
+
+    #status {
+      font-size: clamp(1rem, 2.4vw, 1.4rem);
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    .display-stack {
+      display: grid;
+      width: 100%;
+    }
+
+    .display-layer {
+      grid-area: 1 / 1;
+      display: grid;
+      place-items: center;
+      opacity: 0;
+      transition: opacity var(--fade-ms) ease, transform var(--fade-ms) ease;
+      pointer-events: none;
+    }
+
+    .display-layer.visible {
+      opacity: 1;
+      pointer-events: auto;
+      transform: none;
+    }
+
+    html[data-transition="slide"] .display-layer { transform: translateY(60px); }
+    html[data-transition="slide"] .display-layer.visible { transform: translateY(0); }
+
+    html[data-transition="zoom"] .display-layer { transform: scale(0.6); }
+    html[data-transition="zoom"] .display-layer.visible { transform: scale(1); }
+
+    #timer {
+      font-size: clamp(5rem, 22vw, 14rem);
+      line-height: 0.9;
+      font-weight: 900;
+      letter-spacing: -0.08em;
+      font-variant-numeric: tabular-nums;
+      color: var(--timer-color);
+      text-shadow: 0 0 60px color-mix(in srgb, var(--timer-color) 45%, transparent);
+      transition: color 500ms ease, text-shadow 500ms ease;
+    }
+
+    #message {
+      min-height: 2.4em;
+      display: grid;
+      place-items: center;
+      font-size: clamp(1.4rem, 4.6vw, 2.6rem);
+      font-weight: 800;
+      color: var(--text);
+      padding: 0 24px;
+    }
+
+    #confettiCanvas {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      z-index: 50;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="confettiCanvas" aria-hidden="true"></canvas>
+
+  <main>
+    <div id="status">Bereit</div>
+    <div class="display-stack">
+      <div id="timerDisplay" class="display-layer visible">
+        <div id="timer">00:00</div>
+      </div>
+      <div id="messageDisplay" class="display-layer">
+        <div id="message"></div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const timerEl = document.getElementById('timer');
+    const statusEl = document.getElementById('status');
+    const messageEl = document.getElementById('message');
+    const timerDisplayEl = document.getElementById('timerDisplay');
+    const messageDisplayEl = document.getElementById('messageDisplay');
+    const rootStyle = document.documentElement.style;
+    const rootEl = document.documentElement;
+
+    const GRACE_MS = 30000;
+
+    let config = {
+      yellow_threshold_sec: 120,
+      red_threshold_sec: 300,
+      fade_duration_ms: 600,
+      message_duration_sec: 8,
+      transition_style: 'fade',
+      messages: [],
+    };
+
+    let pendingMessages = [];
+    let displayState = 'timer'; // 'timer' | 'transition'
+    let transitionTimer = null;
+    let lastColor = null;
+    let lastSessionId = null;
+    let appState = 'idle'; // 'idle' | 'running' | 'grace'
+    let graceTimer = null;
+
+    function getAppBasePath() {
+      const trimmedPath = window.location.pathname.replace(/\/+$/, '');
+      if (!trimmedPath) {
+        return '';
+      }
+      if (trimmedPath.endsWith('/guest')) {
+        return trimmedPath.slice(0, -'/guest'.length);
+      }
+      return trimmedPath;
+    }
+
+    function addonUrl(path) {
+      return `${getAppBasePath()}${path}`;
+    }
+
+    function formatDuration(totalSeconds) {
+      const safe = Math.max(0, Math.floor(totalSeconds || 0));
+      const hours = Math.floor(safe / 3600);
+      const minutes = Math.floor((safe % 3600) / 60);
+      const seconds = safe % 60;
+      if (hours > 0) {
+        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+      }
+      return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+
+    // --- Konfetti: leichtgewichtige Canvas-Partikel-Animation (kein externes Skript noetig) ---
+    const confettiCanvas = document.getElementById('confettiCanvas');
+    const confettiCtx = confettiCanvas.getContext('2d');
+    const CONFETTI_COLORS = ['#f87171', '#fbbf24', '#34d399', '#7dd3fc', '#c084fc', '#f472b6'];
+    let confettiParticles = [];
+    let confettiRafId = null;
+
+    function resizeConfettiCanvas() {
+      confettiCanvas.width = window.innerWidth;
+      confettiCanvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeConfettiCanvas);
+    resizeConfettiCanvas();
+
+    function spawnConfettiBurst(count) {
+      const w = confettiCanvas.width;
+      for (let i = 0; i < count; i++) {
+        confettiParticles.push({
+          x: Math.random() * w,
+          y: -20 - Math.random() * 200,
+          vx: (Math.random() - 0.5) * 3.5,
+          vy: 2 + Math.random() * 3,
+          size: 6 + Math.random() * 7,
+          color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+          rotation: Math.random() * 360,
+          rotationSpeed: (Math.random() - 0.5) * 12,
+          shape: Math.random() < 0.5 ? 'rect' : 'circle',
+          opacity: 1,
+        });
+      }
+    }
+
+    function stepConfetti() {
+      const h = confettiCanvas.height;
+      confettiCtx.clearRect(0, 0, confettiCanvas.width, h);
+      confettiParticles = confettiParticles.filter((p) => p.y < h + 40 && p.opacity > 0);
+
+      for (const p of confettiParticles) {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.03;
+        p.rotation += p.rotationSpeed;
+        if (p.y > h * 0.75) {
+          p.opacity -= 0.02;
+        }
+
+        confettiCtx.save();
+        confettiCtx.translate(p.x, p.y);
+        confettiCtx.rotate((p.rotation * Math.PI) / 180);
+        confettiCtx.globalAlpha = Math.max(0, p.opacity);
+        confettiCtx.fillStyle = p.color;
+        if (p.shape === 'rect') {
+          confettiCtx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
+        } else {
+          confettiCtx.beginPath();
+          confettiCtx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+          confettiCtx.fill();
+        }
+        confettiCtx.restore();
+      }
+
+      if (confettiParticles.length > 0) {
+        confettiRafId = requestAnimationFrame(stepConfetti);
+      } else {
+        confettiRafId = null;
+      }
+    }
+
+    function launchConfetti() {
+      spawnConfettiBurst(220);
+      setTimeout(() => spawnConfettiBurst(140), 300);
+      if (!confettiRafId) {
+        confettiRafId = requestAnimationFrame(stepConfetti);
+      }
+    }
+
+    function stopConfetti() {
+      confettiParticles = [];
+      confettiCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+      if (confettiRafId) {
+        cancelAnimationFrame(confettiRafId);
+        confettiRafId = null;
+      }
+    }
+
+    async function loadConfig() {
+      try {
+        const response = await fetch(addonUrl('/api/guest/config'));
+        if (!response.ok) return;
+        const data = await response.json();
+        config = {
+          yellow_threshold_sec: Number(data.yellow_threshold_sec) || 0,
+          red_threshold_sec: Number(data.red_threshold_sec) || 0,
+          fade_duration_ms: Number(data.fade_duration_ms) || 600,
+          message_duration_sec: Number(data.message_duration_sec) || 8,
+          transition_style: ['fade', 'slide', 'zoom'].includes(data.transition_style) ? data.transition_style : 'fade',
+          messages: Array.isArray(data.messages) ? data.messages.filter((m) => m && m.text) : [],
+        };
+        rootStyle.setProperty('--fade-ms', `${config.fade_duration_ms}ms`);
+        rootEl.dataset.transition = config.transition_style;
+      } catch (err) {
+        // keep previously loaded config on transient failures
+      }
+    }
+
+    // Timer startet immer gruen und wechselt anhand der Schwellenwerte zu Gelb/Rot.
+    function computeColor(elapsedSec) {
+      if (config.red_threshold_sec && elapsedSec >= config.red_threshold_sec) return 'red';
+      if (config.yellow_threshold_sec && elapsedSec >= config.yellow_threshold_sec) return 'yellow';
+      return 'green';
+    }
+
+    function applyColor(elapsedSec) {
+      const color = computeColor(elapsedSec);
+      if (color !== lastColor) {
+        lastColor = color;
+        rootStyle.setProperty('--timer-color', `var(--${color})`);
+      }
+    }
+
+    // Zeigt Timer <-> Nachricht nie gleichzeitig: Timer fadet aus, Nachricht fadet ein,
+    // bleibt fuer message_duration_sec sichtbar, fadet aus, Timer fadet wieder ein.
+    function showMessage(text) {
+      if (displayState !== 'timer') return;
+      displayState = 'transition';
+      const fadeMs = config.fade_duration_ms;
+
+      timerDisplayEl.classList.remove('visible');
+      transitionTimer = setTimeout(() => {
+        messageEl.textContent = text;
+        messageDisplayEl.classList.add('visible');
+        transitionTimer = setTimeout(() => {
+          messageDisplayEl.classList.remove('visible');
+          transitionTimer = setTimeout(() => {
+            timerDisplayEl.classList.add('visible');
+            displayState = 'timer';
+          }, fadeMs);
+        }, config.message_duration_sec * 1000);
+      }, fadeMs);
+    }
+
+    function checkMessages(elapsedSec) {
+      if (displayState !== 'timer' || !pendingMessages.length) return;
+      if (elapsedSec >= pendingMessages[0].time_sec) {
+        const msg = pendingMessages.shift();
+        showMessage(msg.text);
+      }
+    }
+
+    function resetState() {
+      if (transitionTimer) {
+        clearTimeout(transitionTimer);
+        transitionTimer = null;
+      }
+      pendingMessages = config.messages
+        .slice()
+        .sort((a, b) => a.time_sec - b.time_sec);
+      displayState = 'timer';
+      messageDisplayEl.classList.remove('visible');
+      timerDisplayEl.classList.add('visible');
+      messageEl.textContent = '';
+      lastColor = null;
+    }
+
+    function goIdle() {
+      if (graceTimer) {
+        clearTimeout(graceTimer);
+        graceTimer = null;
+      }
+      stopConfetti();
+      resetState();
+      appState = 'idle';
+      lastSessionId = null;
+      statusEl.textContent = 'Bereit';
+      timerEl.textContent = '00:00';
+      rootStyle.setProperty('--timer-color', 'var(--idle)');
+    }
+
+    async function refreshSession() {
+      try {
+        const response = await fetch(addonUrl('/api/guest/session'));
+        if (!response.ok) return;
+        const data = await response.json();
+        const session = data.session;
+
+        if (!session) {
+          if (appState !== 'idle') goIdle();
+          return;
+        }
+
+        if (session.id !== lastSessionId) {
+          // Neue Sitzung erkannt: eine laufende Grace-Phase wird sofort abgebrochen.
+          if (graceTimer) {
+            clearTimeout(graceTimer);
+            graceTimer = null;
+          }
+          stopConfetti();
+          resetState();
+          lastSessionId = session.id;
+        }
+
+        const elapsedSec = session.elapsed_sec || 0;
+
+        if (session.status === 'open') {
+          appState = 'running';
+          statusEl.textContent = 'Läuft...';
+          timerEl.textContent = formatDuration(elapsedSec);
+          applyColor(elapsedSec);
+          checkMessages(elapsedSec);
+        } else if (session.status === 'closed') {
+          if (appState === 'running') {
+            appState = 'grace';
+            statusEl.textContent = 'Fertig!';
+            timerEl.textContent = formatDuration(elapsedSec);
+            applyColor(elapsedSec);
+            launchConfetti();
+            graceTimer = setTimeout(goIdle, GRACE_MS);
+          }
+          // Waehrend der Grace-Phase bleibt die Anzeige eingefroren, bis der Timer ablaeuft.
+        }
+      } catch (err) {
+        statusEl.textContent = 'Verbindung verloren';
+      }
+    }
+
+    (async () => {
+      await loadConfig();
+      await refreshSession();
+      setInterval(refreshSession, 1000);
+      setInterval(loadConfig, 30000);
+    })();
+  </script>
+</body>
+</html>
