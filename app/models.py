@@ -8,4 +8,5 @@ class SessionRecord:
     started_at: str
     ended_at: Optional[str]
     duration_sec: Optional[int]
+    session_date: Optional[str]
     status: str

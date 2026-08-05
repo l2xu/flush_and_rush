@@ -3,10 +3,11 @@ FROM ${BUILD_FROM}
 
 WORKDIR /app
 
-# Install runtime dependencies
+# Install runtime dependencies (tzdata fuer korrekte lokale Tagesgrenzen via zoneinfo)
 RUN apk add --no-cache \
     python3 \
-    py3-pip
+    py3-pip \
+    tzdata
 
 # Install Python package dependencies
 COPY requirements.txt /app/requirements.txt

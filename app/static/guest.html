@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="de" data-transition="fade">
+<html lang="de">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -10,12 +10,14 @@
       --bg: #060b14;
       --text: #f4f7fb;
       --muted: #a8b3c4;
-      --idle: #7dd3fc;
       --green: #34d399;
       --yellow: #fbbf24;
       --red: #f87171;
-      --timer-color: var(--idle);
-      --fade-ms: 600ms;
+      --timer-color: var(--green);
+      --track-bg: #101b2d;
+      --fastest-color: #34d399;
+      --median-color: #fbbf24;
+      --longest-color: #f87171;
     }
 
     * { box-sizing: border-box; }
@@ -25,83 +27,107 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background:
-        radial-gradient(circle at top, rgba(125, 211, 252, 0.18), transparent 28%),
-        radial-gradient(circle at bottom right, rgba(99, 102, 241, 0.12), transparent 22%),
-        var(--bg);
+      background: var(--bg);
       color: var(--text);
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
     }
 
-    body {
-      display: grid;
-      place-items: center;
+    .app {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100vh;
     }
 
-    main {
-      width: 100%;
-      height: 100%;
+    .timer-half {
+      height: 50vh;
       display: grid;
-      gap: 18px;
       place-items: center;
-      align-content: center;
+      gap: 12px;
       text-align: center;
-      padding: 20px;
+      background:
+        radial-gradient(circle at top, rgba(125, 211, 252, 0.16), transparent 32%),
+        var(--bg);
     }
-
-    #status {
-      font-size: clamp(1rem, 2.4vw, 1.4rem);
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      color: var(--muted);
-      text-transform: uppercase;
-    }
-
-    .display-stack {
-      display: grid;
-      width: 100%;
-    }
-
-    .display-layer {
-      grid-area: 1 / 1;
-      display: grid;
-      place-items: center;
-      opacity: 0;
-      transition: opacity var(--fade-ms) ease, transform var(--fade-ms) ease;
-      pointer-events: none;
-    }
-
-    .display-layer.visible {
-      opacity: 1;
-      pointer-events: auto;
-      transform: none;
-    }
-
-    html[data-transition="slide"] .display-layer { transform: translateY(60px); }
-    html[data-transition="slide"] .display-layer.visible { transform: translateY(0); }
-
-    html[data-transition="zoom"] .display-layer { transform: scale(0.6); }
-    html[data-transition="zoom"] .display-layer.visible { transform: scale(1); }
 
     #timer {
-      font-size: clamp(5rem, 22vw, 14rem);
+      font-size: 33vh;
       line-height: 0.9;
       font-weight: 900;
-      letter-spacing: -0.08em;
+      letter-spacing: -0.06em;
       font-variant-numeric: tabular-nums;
       color: var(--timer-color);
       text-shadow: 0 0 60px color-mix(in srgb, var(--timer-color) 45%, transparent);
       transition: color 500ms ease, text-shadow 500ms ease;
     }
 
-    #message {
-      min-height: 2.4em;
-      display: grid;
-      place-items: center;
-      font-size: clamp(1.4rem, 4.6vw, 2.6rem);
-      font-weight: 800;
-      color: var(--text);
-      padding: 0 24px;
+    .progress-half {
+      height: 50vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 0 6vw;
+      transition: opacity 300ms ease;
+    }
+
+    .progress-half.hidden {
+      opacity: 0;
+      visibility: hidden;
+    }
+
+    .track-wrapper {
+      position: relative;
+      padding-top: 58px;
+    }
+
+    .marker {
+      position: absolute;
+      top: 0;
+      height: 58px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 4px;
+      transform: translateX(-50%);
+      transition: left 700ms ease;
+      z-index: 2;
+    }
+
+    .marker-label {
+      font-size: 0.8rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .marker-icon {
+      width: 0;
+      height: 0;
+      border-left: 8px solid transparent;
+      border-right: 8px solid transparent;
+      border-top: 12px solid currentColor;
+      filter: drop-shadow(0 0 5px currentColor);
+    }
+
+    .marker.fastest { color: var(--fastest-color); }
+    .marker.median { color: var(--median-color); }
+    .marker.longest { color: var(--longest-color); }
+
+    .progress-track {
+      position: relative;
+      height: 44px;
+      border-radius: 22px;
+      background: var(--track-bg);
+      overflow: hidden;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 22px;
+      background: linear-gradient(90deg, var(--green), var(--timer-color));
+      transition: width 250ms linear;
     }
 
     #confettiCanvas {
@@ -112,64 +138,192 @@
       pointer-events: none;
       z-index: 50;
     }
+
+    .result-overlay {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      gap: 18px;
+      text-align: center;
+      padding: 24px;
+      background: var(--bg);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 500ms ease;
+      z-index: 40;
+    }
+
+    .result-overlay.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .metrics-overlay {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: clamp(20px, 4vw, 56px);
+      background:
+        radial-gradient(circle at top, rgba(125, 211, 252, 0.12), transparent 36%),
+        var(--bg);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 500ms ease;
+      z-index: 30;
+    }
+
+    .metrics-overlay.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .metrics-grid {
+      width: min(1100px, 100%);
+      display: grid;
+      gap: clamp(14px, 2vw, 24px);
+    }
+
+    @media (orientation: landscape) {
+      .metrics-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+
+    @media (orientation: portrait) {
+      .metrics-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    .metric-card {
+      min-height: 180px;
+      display: grid;
+      align-content: center;
+      justify-items: center;
+      gap: 10px;
+      padding: clamp(20px, 4vw, 36px);
+      border-radius: 28px;
+      background: rgba(16, 27, 45, 0.78);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+      text-align: center;
+      backdrop-filter: blur(14px);
+    }
+
+    .metric-label {
+      font-size: clamp(1rem, 2vw, 1.45rem);
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    .metric-value {
+      font-size: clamp(2.2rem, 7vw, 5rem);
+      font-weight: 900;
+      letter-spacing: -0.05em;
+      font-variant-numeric: tabular-nums;
+      color: var(--text);
+      text-wrap: balance;
+    }
+
+    .metric-card.fastest .metric-value { color: var(--fastest-color); }
+    .metric-card.median .metric-value { color: var(--median-color); }
+    .metric-card.longest .metric-value { color: var(--longest-color); }
+
+    #resultDuration {
+      font-size: clamp(4rem, 16vw, 9rem);
+      font-weight: 900;
+      letter-spacing: -0.05em;
+      font-variant-numeric: tabular-nums;
+      color: var(--text);
+    }
+
+    #resultMessage {
+      font-size: clamp(1.3rem, 4vw, 2.2rem);
+      font-weight: 800;
+      color: var(--timer-color);
+      max-width: 90vw;
+    }
   </style>
 </head>
 <body>
   <canvas id="confettiCanvas" aria-hidden="true"></canvas>
 
-  <main>
-    <div id="status">Bereit</div>
-    <div class="display-stack">
-      <div id="timerDisplay" class="display-layer visible">
-        <div id="timer">00:00</div>
+  <main class="app">
+    <section class="timer-half">
+      <div id="timer">00:00</div>
+    </section>
+    <section class="progress-half hidden" id="progressHalf">
+      <div class="track-wrapper" id="trackWrapper">
+        <div class="progress-track">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
       </div>
-      <div id="messageDisplay" class="display-layer">
-        <div id="message"></div>
+    </section>
+  </main>
+
+  <div class="result-overlay" id="resultOverlay">
+    <div id="resultDuration">00:00</div>
+    <div id="resultMessage"></div>
+  </div>
+
+  <div class="metrics-overlay" id="metricsOverlay">
+    <div class="metrics-grid" id="metricsGrid">
+      <div class="metric-card fastest">
+        <div class="metric-label">Kürzeste</div>
+        <div class="metric-value" id="metricFastest">--:--</div>
+      </div>
+      <div class="metric-card median">
+        <div class="metric-label">Median</div>
+        <div class="metric-value" id="metricMedian">--:--</div>
+      </div>
+      <div class="metric-card longest">
+        <div class="metric-label">Längste</div>
+        <div class="metric-value" id="metricLongest">--:--</div>
       </div>
     </div>
-  </main>
+  </div>
 
   <script>
     const timerEl = document.getElementById('timer');
-    const statusEl = document.getElementById('status');
-    const messageEl = document.getElementById('message');
-    const timerDisplayEl = document.getElementById('timerDisplay');
-    const messageDisplayEl = document.getElementById('messageDisplay');
+    const progressHalfEl = document.getElementById('progressHalf');
+    const trackWrapperEl = document.getElementById('trackWrapper');
+    const progressFillEl = document.getElementById('progressFill');
+    const resultOverlayEl = document.getElementById('resultOverlay');
+    const resultDurationEl = document.getElementById('resultDuration');
+    const resultMessageEl = document.getElementById('resultMessage');
+    const metricsOverlayEl = document.getElementById('metricsOverlay');
+    const metricFastestEl = document.getElementById('metricFastest');
+    const metricMedianEl = document.getElementById('metricMedian');
+    const metricLongestEl = document.getElementById('metricLongest');
     const rootStyle = document.documentElement.style;
-    const rootEl = document.documentElement;
 
-    const GRACE_MS = 30000;
-
-    let config = {
-      yellow_threshold_sec: 120,
-      red_threshold_sec: 300,
-      fade_duration_ms: 600,
-      message_duration_sec: 8,
-      transition_style: 'fade',
-      messages: [],
-    };
-
-    let pendingMessages = [];
-    let displayState = 'timer'; // 'timer' | 'transition'
-    let transitionTimer = null;
     let lastColor = null;
-    let lastSessionId = null;
-    let appState = 'idle'; // 'idle' | 'running' | 'grace'
-    let graceTimer = null;
+    let phase = 'idle';
+    let dayStats = { fastest_sec: null, median_sec: null, longest_sec: null, count: 0 };
+    let sessionAnchorMs = null; // Date.now() Aequivalent des Session-Starts (aus Server-Elapsed rekonstruiert)
+    let shownFinishedSessionId = null;
+    let resultTimeoutId = null;
+    let markerEls = {};
+    let scaleMaxSec = 60; // wird pro Session zurueckgesetzt und waechst in 1-Minuten-Schritten mit
 
     function getAppBasePath() {
       const trimmedPath = window.location.pathname.replace(/\/+$/, '');
-      if (!trimmedPath) {
-        return '';
-      }
-      if (trimmedPath.endsWith('/guest')) {
-        return trimmedPath.slice(0, -'/guest'.length);
-      }
+      if (!trimmedPath) return '';
+      if (trimmedPath.endsWith('/guest')) return trimmedPath.slice(0, -'/guest'.length);
       return trimmedPath;
     }
 
     function addonUrl(path) {
       return `${getAppBasePath()}${path}`;
+    }
+
+    function addonWsUrl(path) {
+      const scheme = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+      return `${scheme}${window.location.host}${addonUrl(path)}`;
     }
 
     function formatDuration(totalSeconds) {
@@ -183,7 +337,7 @@
       return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
     }
 
-    // --- Konfetti: leichtgewichtige Canvas-Partikel-Animation (kein externes Skript noetig) ---
+    // --- Konfetti: leichtgewichtige Canvas-Partikel-Animation ---
     const confettiCanvas = document.getElementById('confettiCanvas');
     const confettiCtx = confettiCanvas.getContext('2d');
     const CONFETTI_COLORS = ['#f87171', '#fbbf24', '#34d399', '#7dd3fc', '#c084fc', '#f472b6'];
@@ -225,9 +379,7 @@
         p.y += p.vy;
         p.vy += 0.03;
         p.rotation += p.rotationSpeed;
-        if (p.y > h * 0.75) {
-          p.opacity -= 0.02;
-        }
+        if (p.y > h * 0.75) p.opacity -= 0.02;
 
         confettiCtx.save();
         confettiCtx.translate(p.x, p.y);
@@ -254,45 +406,17 @@
     function launchConfetti() {
       spawnConfettiBurst(220);
       setTimeout(() => spawnConfettiBurst(140), 300);
-      if (!confettiRafId) {
-        confettiRafId = requestAnimationFrame(stepConfetti);
-      }
+      if (!confettiRafId) confettiRafId = requestAnimationFrame(stepConfetti);
     }
 
-    function stopConfetti() {
-      confettiParticles = [];
-      confettiCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
-      if (confettiRafId) {
-        cancelAnimationFrame(confettiRafId);
-        confettiRafId = null;
-      }
-    }
-
-    async function loadConfig() {
-      try {
-        const response = await fetch(addonUrl('/api/guest/config'));
-        if (!response.ok) return;
-        const data = await response.json();
-        config = {
-          yellow_threshold_sec: Number(data.yellow_threshold_sec) || 0,
-          red_threshold_sec: Number(data.red_threshold_sec) || 0,
-          fade_duration_ms: Number(data.fade_duration_ms) || 600,
-          message_duration_sec: Number(data.message_duration_sec) || 8,
-          transition_style: ['fade', 'slide', 'zoom'].includes(data.transition_style) ? data.transition_style : 'fade',
-          messages: Array.isArray(data.messages) ? data.messages.filter((m) => m && m.text) : [],
-        };
-        rootStyle.setProperty('--fade-ms', `${config.fade_duration_ms}ms`);
-        rootEl.dataset.transition = config.transition_style;
-      } catch (err) {
-        // keep previously loaded config on transient failures
-      }
-    }
-
-    // Timer startet immer gruen und wechselt anhand der Schwellenwerte zu Gelb/Rot.
+    // Farbe richtet sich nach der heutigen Bestzeit/Schlechtestzeit, nicht nach fixen Schwellwerten.
     function computeColor(elapsedSec) {
-      if (config.red_threshold_sec && elapsedSec >= config.red_threshold_sec) return 'red';
-      if (config.yellow_threshold_sec && elapsedSec >= config.yellow_threshold_sec) return 'yellow';
-      return 'green';
+      const fastest = dayStats.fastest_sec;
+      const longest = dayStats.longest_sec;
+      if (fastest == null || longest == null) return 'green'; // erste Session des Tages: kein Vergleich moeglich
+      if (elapsedSec < fastest) return 'green';
+      if (elapsedSec >= longest) return 'red';
+      return 'yellow';
     }
 
     function applyColor(elapsedSec) {
@@ -303,116 +427,192 @@
       }
     }
 
-    // Zeigt Timer <-> Nachricht nie gleichzeitig: Timer fadet aus, Nachricht fadet ein,
-    // bleibt fuer message_duration_sec sichtbar, fadet aus, Timer fadet wieder ein.
-    function showMessage(text) {
-      if (displayState !== 'timer') return;
-      displayState = 'transition';
-      const fadeMs = config.fade_duration_ms;
-
-      timerDisplayEl.classList.remove('visible');
-      transitionTimer = setTimeout(() => {
-        messageEl.textContent = text;
-        messageDisplayEl.classList.add('visible');
-        transitionTimer = setTimeout(() => {
-          messageDisplayEl.classList.remove('visible');
-          transitionTimer = setTimeout(() => {
-            timerDisplayEl.classList.add('visible');
-            displayState = 'timer';
-          }, fadeMs);
-        }, config.message_duration_sec * 1000);
-      }, fadeMs);
+    function ensureMarker(key) {
+      if (markerEls[key]) return markerEls[key];
+      const marker = document.createElement('div');
+      marker.className = `marker ${key}`;
+      const label = document.createElement('div');
+      label.className = 'marker-label';
+      const icon = document.createElement('div');
+      icon.className = 'marker-icon';
+      marker.appendChild(label);
+      marker.appendChild(icon);
+      trackWrapperEl.appendChild(marker);
+      markerEls[key] = { marker, label, icon };
+      return markerEls[key];
     }
 
-    function checkMessages(elapsedSec) {
-      if (displayState !== 'timer' || !pendingMessages.length) return;
-      if (elapsedSec >= pendingMessages[0].time_sec) {
-        const msg = pendingMessages.shift();
-        showMessage(msg.text);
+    function removeMarker(key) {
+      if (markerEls[key]) {
+        markerEls[key].marker.remove();
+        delete markerEls[key];
       }
     }
 
-    function resetState() {
-      if (transitionTimer) {
-        clearTimeout(transitionTimer);
-        transitionTimer = null;
+    // Skala waechst in festen 1-Minuten-Schritten, sobald Session oder Marker das aktuelle Ende erreichen.
+    function extendScaleToFit(liveElapsedSec) {
+      const values = [liveElapsedSec, dayStats.fastest_sec, dayStats.median_sec, dayStats.longest_sec];
+      let guard = 0;
+      while (values.some((v) => v != null && v >= scaleMaxSec) && guard < 1000) {
+        scaleMaxSec += 60;
+        guard += 1;
       }
-      pendingMessages = config.messages
-        .slice()
-        .sort((a, b) => a.time_sec - b.time_sec);
-      displayState = 'timer';
-      messageDisplayEl.classList.remove('visible');
-      timerDisplayEl.classList.add('visible');
-      messageEl.textContent = '';
-      lastColor = null;
     }
 
-    function goIdle() {
-      if (graceTimer) {
-        clearTimeout(graceTimer);
-        graceTimer = null;
+    function renderProgress(liveElapsedSec) {
+      extendScaleToFit(liveElapsedSec);
+
+      const fillPct = Math.min(100, (liveElapsedSec / scaleMaxSec) * 100);
+      progressFillEl.style.width = `${fillPct}%`;
+
+      const markerDefs = [
+        { key: 'fastest', value: dayStats.fastest_sec, label: 'K\u00fcrzeste' },
+        { key: 'median', value: dayStats.median_sec, label: 'Median' },
+        { key: 'longest', value: dayStats.longest_sec, label: 'L\u00e4ngste' },
+      ];
+
+      for (const def of markerDefs) {
+        if (def.value == null) {
+          removeMarker(def.key);
+          continue;
+        }
+        const { marker, label } = ensureMarker(def.key);
+        const pct = Math.min(100, (def.value / scaleMaxSec) * 100);
+        marker.style.left = `${pct}%`;
+        label.textContent = `${def.label} (${formatDuration(def.value)})`;
       }
-      stopConfetti();
-      resetState();
-      appState = 'idle';
-      lastSessionId = null;
-      statusEl.textContent = 'Bereit';
+    }
+
+    function resetScale() {
+      const longest = dayStats.longest_sec;
+      const base = longest != null ? longest : 60;
+      scaleMaxSec = Math.max(60, Math.ceil(base / 60) * 60);
+    }
+
+    function updateProgressVisibility() {
+      progressHalfEl.classList.toggle('hidden', !dayStats.count);
+    }
+
+    function updateMetricValues() {
+      metricFastestEl.textContent = dayStats.fastest_sec != null ? formatDuration(dayStats.fastest_sec) : '--:--';
+      metricMedianEl.textContent = dayStats.median_sec != null ? formatDuration(dayStats.median_sec) : '--:--';
+      metricLongestEl.textContent = dayStats.longest_sec != null ? formatDuration(dayStats.longest_sec) : '--:--';
+    }
+
+    function showMetricsOverlay() {
+      updateMetricValues();
+      metricsOverlayEl.classList.add('visible');
+    }
+
+    function hideMetricsOverlay() {
+      metricsOverlayEl.classList.remove('visible');
+    }
+
+    function clearResultTimeout() {
+      if (resultTimeoutId != null) {
+        clearTimeout(resultTimeoutId);
+        resultTimeoutId = null;
+      }
+    }
+
+    function scheduleMetricsReveal() {
+      clearResultTimeout();
+      resultTimeoutId = setTimeout(() => {
+        resultTimeoutId = null;
+        hideResultOverlay();
+        if (dayStats.count) {
+          showMetricsOverlay();
+        }
+      }, 15000);
+    }
+
+    function tickRunning() {
+      if (phase !== 'running' || sessionAnchorMs == null) return;
+      const liveElapsedSec = (Date.now() - sessionAnchorMs) / 1000;
+      timerEl.textContent = formatDuration(liveElapsedSec);
+      applyColor(liveElapsedSec);
+      renderProgress(liveElapsedSec);
+    }
+
+    function showResultOverlay(finished) {
+      resultDurationEl.textContent = formatDuration(finished.duration_sec);
+      resultMessageEl.textContent = finished.message;
+      resultOverlayEl.classList.add('visible');
+    }
+
+    function hideResultOverlay() {
+      resultOverlayEl.classList.remove('visible');
+    }
+
+    function handleState(data) {
+      dayStats = data.day_stats || dayStats;
+      updateMetricValues();
+      updateProgressVisibility();
+
+      if (data.phase === 'running') {
+        if (phase !== 'running') resetScale();
+        phase = 'running';
+        hideResultOverlay();
+        hideMetricsOverlay();
+        clearResultTimeout();
+        sessionAnchorMs = Date.now() - (data.elapsed_sec || 0) * 1000;
+        tickRunning();
+        return;
+      }
+
+      // idle
+      phase = 'idle';
+      sessionAnchorMs = null;
       timerEl.textContent = '00:00';
-      rootStyle.setProperty('--timer-color', 'var(--idle)');
+      renderProgress(0);
+
+      if (data.last_finished) {
+        if (data.last_finished.session_id !== shownFinishedSessionId) {
+          shownFinishedSessionId = data.last_finished.session_id;
+          if (!data.last_finished.is_new_longest) launchConfetti();
+          hideMetricsOverlay();
+          showResultOverlay(data.last_finished);
+          scheduleMetricsReveal();
+        }
+      } else {
+        hideResultOverlay();
+        hideMetricsOverlay();
+        clearResultTimeout();
+      }
     }
 
-    async function refreshSession() {
-      try {
-        const response = await fetch(addonUrl('/api/guest/session'));
-        if (!response.ok) return;
-        const data = await response.json();
-        const session = data.session;
+    let socket = null;
+    let reconnectDelayMs = 1000;
 
-        if (!session) {
-          if (appState !== 'idle') goIdle();
-          return;
+    function connectWebSocket() {
+      socket = new WebSocket(addonWsUrl('/ws/guest'));
+
+      socket.addEventListener('open', () => {
+        reconnectDelayMs = 1000;
+      });
+
+      socket.addEventListener('message', (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          handleState(data);
+        } catch (err) {
+          // ungueltige Nachricht ignorieren
         }
+      });
 
-        if (session.id !== lastSessionId) {
-          // Neue Sitzung erkannt: eine laufende Grace-Phase wird sofort abgebrochen.
-          if (graceTimer) {
-            clearTimeout(graceTimer);
-            graceTimer = null;
-          }
-          stopConfetti();
-          resetState();
-          lastSessionId = session.id;
-        }
+      socket.addEventListener('close', () => {
+        setTimeout(connectWebSocket, reconnectDelayMs);
+        reconnectDelayMs = Math.min(reconnectDelayMs * 1.5, 15000);
+      });
 
-        const elapsedSec = session.elapsed_sec || 0;
-
-        if (session.status === 'open') {
-          appState = 'running';
-          statusEl.textContent = 'Läuft...';
-          timerEl.textContent = formatDuration(elapsedSec);
-          applyColor(elapsedSec);
-          checkMessages(elapsedSec);
-        } else if (session.status === 'closed') {
-          if (appState === 'running') {
-            appState = 'grace';
-            statusEl.textContent = 'Fertig!';
-            timerEl.textContent = formatDuration(elapsedSec);
-            applyColor(elapsedSec);
-            launchConfetti();
-            graceTimer = setTimeout(goIdle, GRACE_MS);
-          }
-          // Waehrend der Grace-Phase bleibt die Anzeige eingefroren, bis der Timer ablaeuft.
-        }
-      } catch (err) {
-        statusEl.textContent = 'Verbindung verloren';
-      }
+      socket.addEventListener('error', () => {
+        socket.close();
+      });
     }
 
     (async () => {
-      await loadConfig();
-      await refreshSession();
-      setInterval(refreshSession, 1000);
-      setInterval(loadConfig, 30000);
+      setInterval(tickRunning, 200);
+      connectWebSocket();
     })();
   </script>
 </body>

@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>flush_and_rush – Admin</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #060b14;
+      --surface: #101b2d;
+      --text: #f4f7fb;
+      --muted: #a8b3c4;
+      --accent: #7dd3fc;
+      --danger: #f87171;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 32px 20px 60px;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      margin: 0 0 6px;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      margin: 0 0 28px;
+    }
+
+    .back-link {
+      display: none;
+      color: var(--accent);
+      background: none;
+      border: none;
+      font-size: 0.95rem;
+      cursor: pointer;
+      padding: 0;
+      margin-bottom: 18px;
+    }
+
+    .back-link.visible { display: inline-block; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--surface);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    th, td {
+      padding: 12px 16px;
+      text-align: left;
+      font-variant-numeric: tabular-nums;
+    }
+
+    thead th {
+      color: var(--muted);
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    tbody tr {
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      cursor: pointer;
+      transition: background 150ms ease;
+    }
+
+    tbody tr:hover { background: rgba(125, 211, 252, 0.08); }
+
+    tbody tr:last-child { border-bottom: none; }
+
+    .empty {
+      color: var(--muted);
+      padding: 24px;
+      text-align: center;
+    }
+
+    .delete-btn {
+      background: rgba(248, 113, 113, 0.12);
+      color: var(--danger);
+      border: 1px solid rgba(248, 113, 113, 0.4);
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+
+    .delete-btn:hover { background: rgba(248, 113, 113, 0.22); }
+
+    #daysView, #sessionsView { display: none; }
+    #daysView.active, #sessionsView.active { display: block; }
+  </style>
+</head>
+<body>
+  <main>
+    <div id="daysView">
+      <h1>Tagesübersicht</h1>
+      <p class="subtitle">Alle aufgezeichneten Tage mit Fastest-, Median- und Longest-Werten.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Datum</th>
+            <th>Fastest</th>
+            <th>Median</th>
+            <th>Longest</th>
+            <th>Sessions</th>
+          </tr>
+        </thead>
+        <tbody id="daysBody"></tbody>
+      </table>
+      <div class="empty" id="daysEmpty" style="display:none;">Noch keine Sessions aufgezeichnet.</div>
+    </div>
+
+    <div id="sessionsView">
+      <button class="back-link visible" id="backButton">&larr; Zurück zur Tagesübersicht</button>
+      <h1 id="sessionsTitle">Sessions</h1>
+      <p class="subtitle">Einzelne Sessions dieses Tages inkl. Uhrzeit. Löschen berechnet die Tageswerte sofort neu.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Start</th>
+            <th>Ende</th>
+            <th>Dauer</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="sessionsBody"></tbody>
+      </table>
+      <div class="empty" id="sessionsEmpty" style="display:none;">Keine Sessions an diesem Tag.</div>
+    </div>
+  </main>
+
+  <script>
+    const daysViewEl = document.getElementById('daysView');
+    const sessionsViewEl = document.getElementById('sessionsView');
+    const daysBodyEl = document.getElementById('daysBody');
+    const daysEmptyEl = document.getElementById('daysEmpty');
+    const sessionsBodyEl = document.getElementById('sessionsBody');
+    const sessionsEmptyEl = document.getElementById('sessionsEmpty');
+    const sessionsTitleEl = document.getElementById('sessionsTitle');
+    const backButtonEl = document.getElementById('backButton');
+
+    function getAppBasePath() {
+      const trimmedPath = window.location.pathname.replace(/\/+$/, '');
+      if (!trimmedPath) return '';
+      if (trimmedPath.endsWith('/admin')) return trimmedPath.slice(0, -'/admin'.length);
+      return trimmedPath;
+    }
+
+    function addonUrl(path) {
+      return `${getAppBasePath()}${path}`;
+    }
+
+    function formatDuration(totalSeconds) {
+      if (totalSeconds == null) return '–';
+      const safe = Math.max(0, Math.floor(totalSeconds));
+      const hours = Math.floor(safe / 3600);
+      const minutes = Math.floor((safe % 3600) / 60);
+      const seconds = safe % 60;
+      if (hours > 0) {
+        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+      }
+      return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+
+    function formatTime(isoUtc) {
+      if (!isoUtc) return '–';
+      const date = new Date(isoUtc);
+      return date.toLocaleString('de-DE', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      });
+    }
+
+    function showDaysView() {
+      sessionsViewEl.classList.remove('active');
+      daysViewEl.classList.add('active');
+      loadDays();
+    }
+
+    function showSessionsView(date) {
+      daysViewEl.classList.remove('active');
+      sessionsViewEl.classList.add('active');
+      sessionsTitleEl.textContent = `Sessions am ${date}`;
+      loadSessions(date);
+    }
+
+    async function loadDays() {
+      try {
+        const response = await fetch(addonUrl('/api/admin/days'));
+        if (!response.ok) return;
+        const data = await response.json();
+        const days = data.days || [];
+
+        daysBodyEl.innerHTML = '';
+        daysEmptyEl.style.display = days.length ? 'none' : 'block';
+
+        for (const day of days) {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${day.date}</td>
+            <td>${formatDuration(day.fastest_sec)}</td>
+            <td>${formatDuration(day.median_sec)}</td>
+            <td>${formatDuration(day.longest_sec)}</td>
+            <td>${day.count}</td>
+          `;
+          tr.addEventListener('click', () => showSessionsView(day.date));
+          daysBodyEl.appendChild(tr);
+        }
+      } catch (err) {
+        // Fehler beim Laden werden bei erneutem Aufruf automatisch behoben
+      }
+    }
+
+    async function loadSessions(date) {
+      try {
+        const response = await fetch(addonUrl(`/api/admin/days/${date}/sessions`));
+        if (!response.ok) return;
+        const data = await response.json();
+        const sessions = data.sessions || [];
+
+        sessionsBodyEl.innerHTML = '';
+        sessionsEmptyEl.style.display = sessions.length ? 'none' : 'block';
+
+        for (const session of sessions) {
+          const tr = document.createElement('tr');
+          const startCell = document.createElement('td');
+          startCell.textContent = formatTime(session.started_at);
+          const endCell = document.createElement('td');
+          endCell.textContent = formatTime(session.ended_at);
+          const durationCell = document.createElement('td');
+          durationCell.textContent = formatDuration(session.duration_sec);
+          const actionCell = document.createElement('td');
+          const deleteBtn = document.createElement('button');
+          deleteBtn.className = 'delete-btn';
+          deleteBtn.textContent = 'Löschen';
+          deleteBtn.addEventListener('click', async (event) => {
+            event.stopPropagation();
+            if (!confirm('Diese Session wirklich löschen?')) return;
+            const deleteResponse = await fetch(addonUrl(`/api/admin/sessions/${session.id}`), { method: 'DELETE' });
+            if (deleteResponse.ok) {
+              await loadSessions(date);
+            }
+          });
+          actionCell.appendChild(deleteBtn);
+
+          tr.appendChild(startCell);
+          tr.appendChild(endCell);
+          tr.appendChild(durationCell);
+          tr.appendChild(actionCell);
+          sessionsBodyEl.appendChild(tr);
+        }
+      } catch (err) {
+        // Fehler beim Laden werden bei erneutem Aufruf automatisch behoben
+      }
+    }
+
+    backButtonEl.addEventListener('click', showDaysView);
+
+    showDaysView();
+  </script>
+</body>
+</html>

@@ -1,5 +1,7 @@
 # Umsetzungsplan: Home Assistant Add-on "Klo-Tracker"
 
+ACHTUNG DIESER PLAN BESCHREIBT EINEN ALTEN STAND!
+
 ## Ausgangslage
 Im Ordner `addons/flush_and_rush` existieren bereits folgende Basisdateien:
 - `config.yaml`
