@@ -1,18 +1,16 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
-from starlette.responses import Response
 
-from app.admin_frontend import render_admin_page
 from app.db import (
     delete_session,
-    get_latest_session,
+    get_statistics,
     init_db,
     list_days,
     list_sessions_for_day,
 )
-from app.guest_frontend import render_guest_page
+from app.pages import render_page
 from app.services.sensor_service import SensorSessionService
 from app.settings import load_settings
 from app.ws_manager import GuestConnectionManager
@@ -39,20 +37,31 @@ async def lifespan(app_instance: FastAPI):
     await sensor_service.stop()
 
 
-app = FastAPI(title="Klo-Tracker", version="0.2.0", lifespan=lifespan, redirect_slashes=False)
-SIDEBAR_ROUTE_PREFIX = "/local_flush_and_rush"
+app = FastAPI(title="Flush & Rush", version="0.4.0", lifespan=lifespan, redirect_slashes=False)
 
 
-def _guest_session_payload() -> dict:
-    session = get_latest_session()
-    return {"session": session}
+def _is_ingress(request: Request) -> bool:
+    """Erkennt Aufrufe ueber den Home-Assistant-Ingress-Proxy.
+
+    Der Supervisor setzt X-Ingress-Path (Basis-Pfad des Panels); neuere Versionen
+    zusaetzlich X-Hass-Source: core.ingress. Beide Signale werden akzeptiert.
+    """
+    return bool(request.headers.get("X-Ingress-Path")) or (
+        request.headers.get("X-Hass-Source", "").lower() == "core.ingress"
+    )
 
 
-def _guest_config_payload() -> dict:
-    settings = load_settings()
-    return {
-        "fade_duration_ms": settings.fade_duration_ms,
-    }
+def _root_view(request: Request) -> str:
+    """Welche Seite die Add-on-Wurzel ausliefert.
+
+    Der Sidebar-Eintrag oeffnet die Wurzel ueber Ingress und soll die
+    Admin-Auswertung zeigen; der direkte Port-Zugriff (WC-Display) bleibt auf der
+    Gaeste-Ansicht. Die Option 'sidebar_view' erzwingt bei Bedarf eine Seite.
+    """
+    configured = load_settings().sidebar_view
+    if configured in {"admin", "guest"}:
+        return configured
+    return "admin" if _is_ingress(request) else "guest"
 
 
 @app.get("/health")
@@ -73,62 +82,53 @@ def health() -> JSONResponse:
     )
 
 
-@app.get("/")
-@app.get("//")
-@app.get(SIDEBAR_ROUTE_PREFIX)
-@app.get(f"{SIDEBAR_ROUTE_PREFIX}/")
-def index() -> Response:
-    return HTMLResponse(render_guest_page())
+@app.get("/", response_class=HTMLResponse)
+@app.get("//", response_class=HTMLResponse)
+def index(request: Request) -> HTMLResponse:
+    return HTMLResponse(render_page(_root_view(request)))
 
 
 @app.get("/guest", response_class=HTMLResponse)
-@app.get(f"{SIDEBAR_ROUTE_PREFIX}/guest", response_class=HTMLResponse)
-@app.get(f"{SIDEBAR_ROUTE_PREFIX}/guest/", response_class=HTMLResponse)
+@app.get("/guest/", response_class=HTMLResponse)
 def guest_view() -> HTMLResponse:
-    return HTMLResponse(render_guest_page())
+    return HTMLResponse(render_page("guest"))
 
 
 @app.get("/admin", response_class=HTMLResponse)
-@app.get(f"{SIDEBAR_ROUTE_PREFIX}/admin", response_class=HTMLResponse)
-@app.get(f"{SIDEBAR_ROUTE_PREFIX}/admin/", response_class=HTMLResponse)
+@app.get("/admin/", response_class=HTMLResponse)
 def admin_view() -> HTMLResponse:
-    return HTMLResponse(render_admin_page())
-
-
-@app.get("/api/guest/session")
-@app.get(f"{SIDEBAR_ROUTE_PREFIX}/api/guest/session")
-def api_guest_session() -> JSONResponse:
-    return JSONResponse(_guest_session_payload())
+    return HTMLResponse(render_page("admin"))
 
 
 @app.get("/api/guest/config")
-@app.get(f"{SIDEBAR_ROUTE_PREFIX}/api/guest/config")
 def api_guest_config() -> JSONResponse:
-    return JSONResponse(_guest_config_payload())
+    return JSONResponse({"fade_duration_ms": load_settings().fade_duration_ms})
 
 
 @app.get("/api/admin/days")
-@app.get(f"{SIDEBAR_ROUTE_PREFIX}/api/admin/days")
 def api_admin_days() -> JSONResponse:
     return JSONResponse({"days": list_days()})
 
 
+@app.get("/api/admin/stats")
+def api_admin_stats(days: int = 30) -> JSONResponse:
+    return JSONResponse(get_statistics(day_limit=max(1, min(days, 365))))
+
+
 @app.get("/api/admin/days/{session_date}/sessions")
-@app.get(f"{SIDEBAR_ROUTE_PREFIX}/api/admin/days/{{session_date}}/sessions")
 def api_admin_day_sessions(session_date: str) -> JSONResponse:
     return JSONResponse({"sessions": list_sessions_for_day(session_date)})
 
 
 @app.delete("/api/admin/sessions/{session_id}")
-@app.delete(f"{SIDEBAR_ROUTE_PREFIX}/api/admin/sessions/{{session_id}}")
 def api_admin_delete_session(session_id: int) -> JSONResponse:
-    deleted = delete_session(session_id)
-    if not deleted:
+    if not delete_session(session_id):
         raise HTTPException(status_code=404, detail="Session nicht gefunden")
     return JSONResponse({"deleted": True})
 
 
-async def _guest_websocket(websocket: WebSocket) -> None:
+@app.websocket("/ws/guest")
+async def ws_guest(websocket: WebSocket) -> None:
     ws_manager: GuestConnectionManager = websocket.app.state.ws_manager
     sensor_service: SensorSessionService = websocket.app.state.sensor_service
 
@@ -142,26 +142,3 @@ async def _guest_websocket(websocket: WebSocket) -> None:
         pass
     finally:
         await ws_manager.disconnect(websocket)
-
-
-@app.websocket("/ws/guest")
-async def ws_guest(websocket: WebSocket) -> None:
-    await _guest_websocket(websocket)
-
-
-@app.websocket(f"{SIDEBAR_ROUTE_PREFIX}/ws/guest")
-async def ws_guest_sidebar(websocket: WebSocket) -> None:
-    await _guest_websocket(websocket)
-
-
-@app.get(f"{SIDEBAR_ROUTE_PREFIX}/{{path:path}}", response_class=HTMLResponse)
-def sidebar_panel_fallback(path: str) -> HTMLResponse:
-    # HA can open custom panel URLs with variant subpaths; serve guest shell for non-API/ws paths.
-    if path.startswith("api/") or path.startswith("ws/"):
-        raise HTTPException(status_code=404, detail="Not Found")
-    if path.startswith("admin"):
-        return HTMLResponse(render_admin_page())
-    return HTMLResponse(render_guest_page())
-
-
-

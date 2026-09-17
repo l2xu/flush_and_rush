@@ -1,10 +1,13 @@
 from dataclasses import dataclass
+from functools import lru_cache
 import json
 import os
 from typing import Any, Dict
 
 OPTIONS_PATH = "/data/options.json"
-LOCAL_TIMEZONE = "Europe/Berlin"
+# Home Assistant setzt TZ im Container; Fallback bleibt die bisherige feste Zone,
+# damit bereits gespeicherte session_date-Werte ihre Tagesgrenze behalten.
+LOCAL_TIMEZONE = os.getenv("TZ") or "Europe/Berlin"
 
 
 @dataclass(frozen=True)
@@ -12,6 +15,7 @@ class Settings:
     sensor_entity_id: str
     db_path: str
     sensor_inverted: bool
+    sidebar_view: str
     fade_duration_ms: int
 
 
@@ -31,13 +35,24 @@ def _as_bool(value: Any, default: bool) -> bool:
     return default
 
 
+def _as_int(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+@lru_cache(maxsize=1)
 def load_settings() -> Settings:
     # Home Assistant Supervisor schreibt die YAML-Optionen als JSON nach /data/options.json.
+    # Optionen aendern sich nur beim Add-on-Neustart, daher wird das Ergebnis gecacht
+    # (ohne Cache wuerde jeder DB-Zugriff die Datei neu lesen und parsen).
     options = _load_options()
 
     return Settings(
         sensor_entity_id=str(options.get("sensor_entity_id", os.getenv("SENSOR_ENTITY_ID", "binary_sensor.klodeckel"))),
         db_path=os.getenv("KLO_TRACKER_DB_PATH", "/data/klo_tracker.db"),
         sensor_inverted=_as_bool(options.get("sensor_inverted", os.getenv("SENSOR_INVERTED", "false")), False),
-        fade_duration_ms=int(options.get("fade_duration_ms", 600)),
+        fade_duration_ms=_as_int(options.get("fade_duration_ms"), 600),
+        sidebar_view=str(options.get("sidebar_view", "auto")).strip().lower(),
     )

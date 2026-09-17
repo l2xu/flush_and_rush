@@ -2,17 +2,25 @@
 <html lang="de">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>flush_and_rush – Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Flush &amp; Rush – Auswertung</title>
   <style>
     :root {
       color-scheme: dark;
       --bg: #060b14;
       --surface: #101b2d;
+      --surface-2: #16243a;
       --text: #f4f7fb;
       --muted: #a8b3c4;
       --accent: #7dd3fc;
       --danger: #f87171;
+      --grid: #22324b;
+      /* Serien-Slots: gegen die Kartenflaeche #101b2d im Dark-Mode validiert
+         (Helligkeitsband, Chroma, CVD-Abstand, Kontrast). */
+      --series-1: #3987e5;
+      --series-2: #d95926;
+      --series-3: #199e70;
+      --radius: 16px;
     }
 
     * { box-sizing: border-box; }
@@ -23,42 +31,271 @@
       background: var(--bg);
       color: var(--text);
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-text-size-adjust: 100%;
     }
 
     main {
-      max-width: 960px;
+      max-width: 1180px;
       margin: 0 auto;
-      padding: 32px 20px 60px;
+      padding: clamp(16px, 3vw, 36px) clamp(16px, 3vw, 28px) 64px;
     }
 
     h1 {
-      font-size: 1.6rem;
-      margin: 0 0 6px;
+      font-size: clamp(1.35rem, 3.4vw, 1.9rem);
+      margin: 0 0 4px;
+      letter-spacing: -0.02em;
+    }
+
+    h2 {
+      font-size: clamp(0.95rem, 2vw, 1.05rem);
+      margin: 0;
+      letter-spacing: -0.01em;
     }
 
     .subtitle {
       color: var(--muted);
-      margin: 0 0 28px;
+      margin: 0;
+      font-size: clamp(0.85rem, 2vw, 0.95rem);
     }
 
-    .back-link {
-      display: none;
-      color: var(--accent);
-      background: none;
+    /* ---------- Kopfzeile + Filterleiste (eine Leiste ueber allem) ---------- */
+    .page-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 12px 20px;
+      margin-bottom: clamp(18px, 3vw, 28px);
+    }
+
+    .filter-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      background: var(--surface);
+      padding: 5px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.07);
+    }
+
+    .filter-row button {
+      appearance: none;
       border: none;
-      font-size: 0.95rem;
+      background: none;
+      color: var(--muted);
+      font: inherit;
+      font-size: 0.85rem;
+      padding: 7px 14px;
+      border-radius: 999px;
       cursor: pointer;
-      padding: 0;
-      margin-bottom: 18px;
+      white-space: nowrap;
+      transition: background 150ms ease, color 150ms ease;
     }
 
-    .back-link.visible { display: inline-block; }
+    .filter-row button:hover { color: var(--text); }
+
+    .filter-row button[aria-pressed="true"] {
+      background: var(--surface-2);
+      color: var(--text);
+      box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.28);
+    }
+
+    /* ---------- Kennzahlen: primaere KPI-Zeile + nachrangige Statistikzeile ----------
+       Bewusst ohne Kacheln/Rahmen je Element - die Groessenstufe traegt die Hierarchie,
+       Whitespace trennt statt Boxen. */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: clamp(14px, 3vw, 32px);
+      margin-bottom: clamp(18px, 3vw, 26px);
+    }
+
+    .kpi { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+
+    .kpi-label {
+      font-size: 0.8rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .kpi-value {
+      font-size: clamp(1.8rem, 5vw, 2.3rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.05;
+    }
+
+    .kpi-hint { font-size: 0.8rem; color: var(--muted); }
+
+    /* Genau ein echter Hero-Wert: die Gesamtzahl der Sessions. */
+    .kpi.hero .kpi-value { font-size: clamp(2.4rem, 7.5vw, 3.2rem); color: var(--accent); }
+
+    .stat-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px clamp(20px, 4vw, 32px);
+      padding-top: clamp(14px, 2.5vw, 20px);
+      margin-bottom: clamp(4px, 1vw, 8px);
+      border-top: 1px solid rgba(255, 255, 255, 0.07);
+    }
+
+    .stat { display: flex; flex-direction: column; gap: 2px; min-width: 108px; }
+    .stat-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .stat-value { font-size: 1.05rem; font-weight: 600; letter-spacing: -0.01em; }
+    .stat-hint { font-size: 0.72rem; color: var(--muted); }
+
+    /* ---------- Thematische Abschnitte ----------
+       Ein Abschnitt = eine Ueberschrift + Whitespace/Trennlinie, keine Einzelbox je Element. */
+    .section { margin-bottom: clamp(30px, 4.5vw, 44px); }
+
+    .section + .section {
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding-top: clamp(26px, 4vw, 38px);
+    }
+
+    .section-head { margin: 0 0 clamp(14px, 2vw, 20px); }
+    .section-head h2 { margin: 0 0 3px; }
+
+    .section-head--with-filter {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 12px 20px;
+    }
+
+    /* Eigener Pfeil statt Browser-Standardmarker: der sitzt sonst je nach Browser
+       oberhalb des Textes statt davor. */
+    details.section > summary.section-head {
+      cursor: pointer;
+      list-style: none;
+    }
+
+    details.section > summary.section-head::-webkit-details-marker { display: none; }
+    details.section > summary.section-head:hover h2 { color: var(--accent); }
+
+    .disclosure-icon {
+      display: inline-block;
+      width: 0.6em;
+      margin-right: 8px;
+      color: var(--muted);
+      transition: transform 150ms ease;
+    }
+
+    .disclosure-icon::before { content: '▸'; }
+    details.section[open] > summary.section-head .disclosure-icon { transform: rotate(90deg); }
+
+    /* ---------- Diagramme ---------- */
+    .chart-item { position: relative; min-width: 0; margin-bottom: clamp(20px, 3vw, 28px); }
+    .chart-item:last-child { margin-bottom: 0; }
+
+    .chart-item-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+
+    .chart-item-head h3 {
+      font-size: clamp(0.88rem, 1.8vw, 1rem);
+      font-weight: 600;
+      margin: 0;
+      letter-spacing: -0.01em;
+    }
+
+    .pattern-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: clamp(20px, 3vw, 32px) clamp(24px, 3vw, 36px);
+    }
+
+    @media (max-width: 700px) {
+      .pattern-grid { grid-template-columns: minmax(0, 1fr); }
+    }
+
+    .legend {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .legend i {
+      width: 12px;
+      height: 3px;
+      border-radius: 2px;
+      background: var(--series-1);
+      flex: none;
+    }
+
+    .legend i.band { height: 10px; background: color-mix(in srgb, var(--series-1) 26%, transparent); }
+
+    .chart { width: 100%; min-width: 0; }
+    .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+
+    .chart-empty {
+      color: var(--muted);
+      font-size: 0.88rem;
+      padding: 28px 0;
+      text-align: center;
+    }
+
+    .grid-line { stroke: var(--grid); stroke-width: 1; shape-rendering: crispEdges; }
+    .axis-text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+    .axis-text.mid { text-anchor: middle; }
+    .axis-text.end { text-anchor: end; }
+    /* Datenmarken nehmen keine Pointer-Events an; dafuer liegen die
+       .hit-Flaechen darueber (groesser als die Marke selbst). */
+    .bar, .band, .line, .dot, .grid-line, .axis-text { pointer-events: none; }
+    .bar { fill: var(--series-1); transition: fill 120ms ease; }
+    .bar.dim { fill: color-mix(in srgb, var(--series-1) 38%, transparent); }
+    .bar.active { fill: var(--accent); }
+    .band { fill: color-mix(in srgb, var(--series-1) 22%, transparent); }
+    .line { fill: none; stroke: var(--series-1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+    .dot { fill: var(--series-1); stroke: var(--surface); stroke-width: 2; }
+    .crosshair { stroke: var(--accent); stroke-width: 1; opacity: 0.5; pointer-events: none; }
+    .hit { fill: transparent; cursor: pointer; }
+    .hit:focus-visible { outline: none; }
+
+    .tooltip {
+      position: absolute;
+      z-index: 5;
+      pointer-events: none;
+      background: #0a1322;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 10px;
+      padding: 8px 11px;
+      font-size: 0.8rem;
+      line-height: 1.45;
+      white-space: nowrap;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+      opacity: 0;
+      transition: opacity 120ms ease;
+      transform: translate(-50%, -100%);
+    }
+
+    .tooltip.visible { opacity: 1; }
+    .tooltip b { font-variant-numeric: tabular-nums; }
+    .tooltip .t-label { color: var(--muted); }
+
+    /* ---------- Tabellen ---------- */
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
     table {
       width: 100%;
       border-collapse: collapse;
       background: var(--surface);
-      border-radius: 12px;
+      border-radius: var(--radius);
       overflow: hidden;
     }
 
@@ -66,30 +303,33 @@
       padding: 12px 16px;
       text-align: left;
       font-variant-numeric: tabular-nums;
+      white-space: nowrap;
     }
 
     thead th {
       color: var(--muted);
-      font-size: 0.8rem;
+      font-size: 0.75rem;
       text-transform: uppercase;
       letter-spacing: 0.04em;
       border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      font-weight: 600;
     }
 
     tbody tr {
       border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-      cursor: pointer;
       transition: background 150ms ease;
     }
 
-    tbody tr:hover { background: rgba(125, 211, 252, 0.08); }
-
+    tbody tr[data-clickable] { cursor: pointer; }
+    tbody tr[data-clickable]:hover { background: rgba(125, 211, 252, 0.08); }
     tbody tr:last-child { border-bottom: none; }
 
     .empty {
       color: var(--muted);
       padding: 24px;
       text-align: center;
+      background: var(--surface);
+      border-radius: var(--radius);
     }
 
     .delete-btn {
@@ -98,184 +338,715 @@
       border: 1px solid rgba(248, 113, 113, 0.4);
       border-radius: 8px;
       padding: 6px 12px;
+      font: inherit;
       font-size: 0.85rem;
       cursor: pointer;
     }
 
     .delete-btn:hover { background: rgba(248, 113, 113, 0.22); }
 
-    #daysView, #sessionsView { display: none; }
-    #daysView.active, #sessionsView.active { display: block; }
+    .back-link {
+      color: var(--accent);
+      background: none;
+      border: none;
+      font: inherit;
+      font-size: 0.95rem;
+      cursor: pointer;
+      padding: 0;
+      margin-bottom: 16px;
+    }
+
+    /* Schmale Screens: Tabellenzeilen werden zu Karten mit Labels. */
+    @media (max-width: 620px) {
+      table, thead, tbody, tr, th, td { display: block; }
+      thead { display: none; }
+      table { background: none; }
+      tbody tr {
+        background: var(--surface);
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: var(--radius);
+        margin-bottom: 10px;
+        padding: 6px 4px;
+      }
+      td {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 7px 14px;
+        white-space: normal;
+      }
+      td::before {
+        content: attr(data-label);
+        color: var(--muted);
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        flex: none;
+      }
+      td:empty { display: none; }
+      td.actions { justify-content: flex-end; }
+      td.actions::before { content: none; }
+    }
+
+    #dashboardView, #sessionsView { display: none; }
+    #dashboardView.active, #sessionsView.active { display: block; }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; }
+    }
   </style>
 </head>
 <body>
   <main>
-    <div id="daysView">
-      <h1>Tagesübersicht</h1>
-      <p class="subtitle">Alle aufgezeichneten Tage mit Fastest-, Median- und Longest-Werten.</p>
-      <table>
-        <thead>
-          <tr>
-            <th>Datum</th>
-            <th>Fastest</th>
-            <th>Median</th>
-            <th>Longest</th>
-            <th>Sessions</th>
-          </tr>
-        </thead>
-        <tbody id="daysBody"></tbody>
-      </table>
-      <div class="empty" id="daysEmpty" style="display:none;">Noch keine Sessions aufgezeichnet.</div>
+    <!-- ======================= Dashboard ======================= -->
+    <div id="dashboardView">
+      <div class="page-head">
+        <div>
+          <h1>Flush &amp; Rush – Auswertung</h1>
+          <p class="subtitle">Sitzungen, Bestzeiten und Verteilungen im Überblick.</p>
+        </div>
+      </div>
+
+      <!-- Übersicht: 3 prominente Kennzahlen, Rest nachrangig in einer Zeile -->
+      <section class="section" aria-label="Übersicht">
+        <div class="kpi-row" id="kpiRow"></div>
+        <div class="stat-row" id="statRow"></div>
+      </section>
+
+      <!-- Zeitliche Muster & Dauer-Verteilung: gehören inhaltlich zusammen -->
+      <section class="section">
+        <div class="section-head">
+          <h2>Muster &amp; Verteilung</h2>
+          <p class="subtitle">Wann Sessions stattfinden und wie lange sie dauern.</p>
+        </div>
+
+        <div class="pattern-grid">
+          <div class="chart-item">
+            <div class="chart-item-head">
+              <h3>Nach Uhrzeit</h3>
+            </div>
+            <div class="chart" id="chartHour"></div>
+          </div>
+
+          <div class="chart-item">
+            <div class="chart-item-head">
+              <h3>Nach Wochentag</h3>
+            </div>
+            <div class="chart" id="chartWeekday"></div>
+          </div>
+
+          <div class="chart-item">
+            <div class="chart-item-head">
+              <h3>Dauer-Verteilung</h3>
+            </div>
+            <div class="chart" id="chartHistogram"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Verlauf: die beiden Zeitreihen. Der Zeitraum-Filter steht hier, weil er
+           genau diese und die Uebersicht darueber beeinflusst - der Kopfbereich
+           bleibt sonst immer gleich. -->
+      <section class="section">
+        <div class="section-head section-head--with-filter">
+          <div>
+            <h2>Verlauf</h2>
+            <p class="subtitle">Sessions und Dauer über die Zeit.</p>
+          </div>
+          <div class="filter-row" id="rangeFilter" role="group" aria-label="Zeitraum">
+            <button type="button" data-days="7">7 Tage</button>
+            <button type="button" data-days="30" aria-pressed="true">30 Tage</button>
+            <button type="button" data-days="90">90 Tage</button>
+            <button type="button" data-days="365">Alles</button>
+          </div>
+        </div>
+
+        <div class="chart-item">
+          <div class="chart-item-head">
+            <h3>Sessions pro Tag</h3>
+            <p class="subtitle" id="sessionsPerDayHint"></p>
+          </div>
+          <div class="chart" id="chartPerDay"></div>
+        </div>
+
+        <div class="chart-item">
+          <div class="chart-item-head">
+            <h3>Dauer-Verlauf</h3>
+            <div class="legend">
+              <span><i></i>Median</span>
+              <span><i class="band"></i>Kürzeste – Längste</span>
+            </div>
+          </div>
+          <div class="chart" id="chartDuration"></div>
+        </div>
+      </section>
+
+      <!-- Tagesübersicht: Detailtabelle, on-demand -->
+      <details class="section" id="daysDetails">
+        <summary class="section-head">
+          <h2><span class="disclosure-icon" aria-hidden="true"></span>Tagesübersicht</h2>
+          <p class="subtitle">Tag antippen für die einzelnen Sessions.</p>
+        </summary>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Datum</th>
+                <th scope="col">Kürzeste</th>
+                <th scope="col">Median</th>
+                <th scope="col">Längste</th>
+                <th scope="col">Sessions</th>
+              </tr>
+            </thead>
+            <tbody id="daysBody"></tbody>
+          </table>
+        </div>
+        <div class="empty" id="daysEmpty" hidden>Noch keine Sessions aufgezeichnet.</div>
+      </details>
     </div>
 
+    <!-- ======================= Sessions eines Tages ======================= -->
     <div id="sessionsView">
-      <button class="back-link visible" id="backButton">&larr; Zurück zur Tagesübersicht</button>
+      <button class="back-link" id="backButton" type="button">&larr; Zurück zur Übersicht</button>
       <h1 id="sessionsTitle">Sessions</h1>
-      <p class="subtitle">Einzelne Sessions dieses Tages inkl. Uhrzeit. Löschen berechnet die Tageswerte sofort neu.</p>
-      <table>
-        <thead>
-          <tr>
-            <th>Start</th>
-            <th>Ende</th>
-            <th>Dauer</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="sessionsBody"></tbody>
-      </table>
-      <div class="empty" id="sessionsEmpty" style="display:none;">Keine Sessions an diesem Tag.</div>
+      <p class="subtitle" style="margin-bottom:18px;">Einzelne Sessions dieses Tages. Löschen berechnet die Tageswerte sofort neu.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Start</th>
+              <th scope="col">Ende</th>
+              <th scope="col">Dauer</th>
+              <th scope="col" aria-label="Aktionen"></th>
+            </tr>
+          </thead>
+          <tbody id="sessionsBody"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="sessionsEmpty" hidden>Keine Sessions an diesem Tag.</div>
     </div>
   </main>
 
   <script>
-    const daysViewEl = document.getElementById('daysView');
-    const sessionsViewEl = document.getElementById('sessionsView');
-    const daysBodyEl = document.getElementById('daysBody');
-    const daysEmptyEl = document.getElementById('daysEmpty');
-    const sessionsBodyEl = document.getElementById('sessionsBody');
-    const sessionsEmptyEl = document.getElementById('sessionsEmpty');
-    const sessionsTitleEl = document.getElementById('sessionsTitle');
-    const backButtonEl = document.getElementById('backButton');
+  'use strict';
 
-    function getAppBasePath() {
-      const trimmedPath = window.location.pathname.replace(/\/+$/, '');
-      if (!trimmedPath) return '';
-      if (trimmedPath.endsWith('/admin')) return trimmedPath.slice(0, -'/admin'.length);
-      return trimmedPath;
+  const $ = (id) => document.getElementById(id);
+  const dashboardViewEl = $('dashboardView');
+  const sessionsViewEl = $('sessionsView');
+  const daysBodyEl = $('daysBody');
+  const daysEmptyEl = $('daysEmpty');
+  const sessionsBodyEl = $('sessionsBody');
+  const sessionsEmptyEl = $('sessionsEmpty');
+  const sessionsTitleEl = $('sessionsTitle');
+  const kpiRowEl = $('kpiRow');
+  const statRowEl = $('statRow');
+  const rangeFilterEl = $('rangeFilter');
+
+  const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+
+  let rangeDays = 30;
+  let statsCache = null;
+
+  /* ---------------- Pfade / Formatierung ---------------- */
+
+  // Unter Ingress laeuft die App auf /api/hassio_ingress/<token>/…, direkt auf /.
+  function appBasePath() {
+    const path = window.location.pathname.replace(/\/+$/, '');
+    for (const suffix of ['/admin', '/guest']) {
+      if (path.endsWith(suffix)) return path.slice(0, -suffix.length);
     }
+    return path;
+  }
 
-    function addonUrl(path) {
-      return `${getAppBasePath()}${path}`;
+  const addonUrl = (path) => `${appBasePath()}${path}`;
+
+  function formatDuration(totalSeconds) {
+    if (totalSeconds == null) return '–';
+    const safe = Math.max(0, Math.round(totalSeconds));
+    const h = Math.floor(safe / 3600);
+    const m = Math.floor((safe % 3600) / 60);
+    const s = safe % 60;
+    const pad = (n) => String(n).padStart(2, '0');
+    return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+  }
+
+  // Kompakte Achsenbeschriftung: 45s / 2m / 1h
+  function formatDurationShort(sec) {
+    if (sec == null) return '–';
+    if (sec < 60) return `${Math.round(sec)}s`;
+    if (sec < 3600) return `${Math.round(sec / 60)}m`;
+    return `${Math.round((sec / 3600) * 10) / 10}h`;
+  }
+
+  function formatTotal(sec) {
+    if (!sec) return '0m';
+    const h = Math.floor(sec / 3600);
+    const m = Math.round((sec % 3600) / 60);
+    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  }
+
+  function formatTime(isoUtc) {
+    if (!isoUtc) return '–';
+    return new Date(isoUtc).toLocaleTimeString('de-DE', {
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    });
+  }
+
+  function formatDayShort(isoDate) {
+    const [y, m, d] = String(isoDate).split('-').map(Number);
+    if (!y) return String(isoDate);
+    return `${String(d).padStart(2, '0')}.${String(m).padStart(2, '0')}.`;
+  }
+
+  function formatDayLong(isoDate) {
+    const [y, m, d] = String(isoDate).split('-').map(Number);
+    if (!y) return String(isoDate);
+    return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('de-DE', {
+      weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC',
+    });
+  }
+
+  const esc = (value) => String(value).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+
+  /* ---------------- Achsen-Skalen ---------------- */
+
+  function niceCountTicks(maxValue, target = 4) {
+    if (!(maxValue > 0)) return { max: 1, ticks: [0, 1] };
+    const rough = maxValue / target;
+    const magnitude = Math.pow(10, Math.floor(Math.log10(rough)));
+    const norm = rough / magnitude;
+    const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * magnitude;
+    const top = Math.ceil(maxValue / step) * step;
+    const ticks = [];
+    for (let v = 0; v <= top + 1e-9; v += step) ticks.push(Math.round(v));
+    return { max: top, ticks };
+  }
+
+  const TIME_STEPS = [5, 10, 15, 30, 60, 120, 180, 300, 600, 900, 1800, 3600, 7200];
+
+  function niceTimeTicks(maxValue, target = 4) {
+    if (!(maxValue > 0)) return { max: 60, ticks: [0, 30, 60] };
+    const rough = maxValue / target;
+    const step = TIME_STEPS.find((s) => s >= rough) || Math.ceil(rough / 3600) * 3600;
+    const top = Math.ceil(maxValue / step) * step;
+    const ticks = [];
+    for (let v = 0; v <= top + 1e-9; v += step) ticks.push(v);
+    return { max: top, ticks };
+  }
+
+  /* ---------------- Chart-Grundgeruest ---------------- */
+
+  const PAD = { top: 14, right: 14, bottom: 30, left: 46 };
+  const MAX_BAR = 24;   // Balken nie die ganze Spur fuellen
+  const BAR_GAP = 2;    // 2px Flaechen-Abstand zwischen Nachbarn
+  const MIN_HIT = 24;   // Mindest-Trefferflaeche fuer Hover/Touch
+
+  // Ein Tooltip pro Karte, wiederverwendet ueber alle Neuzeichnungen hinweg.
+  function chartHost(hostEl) {
+    const card = hostEl.parentElement;
+    let tooltip = card.querySelector(':scope > .tooltip');
+    if (!tooltip) {
+      tooltip = document.createElement('div');
+      tooltip.className = 'tooltip';
+      tooltip.setAttribute('role', 'status');
+      card.appendChild(tooltip);
     }
+    return tooltip;
+  }
 
-    function formatDuration(totalSeconds) {
-      if (totalSeconds == null) return '–';
-      const safe = Math.max(0, Math.floor(totalSeconds));
-      const hours = Math.floor(safe / 3600);
-      const minutes = Math.floor((safe % 3600) / 60);
-      const seconds = safe % 60;
-      if (hours > 0) {
-        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  function showTooltip(hostEl, tooltip, x, y, html) {
+    tooltip.innerHTML = html;
+    const card = hostEl.parentElement.getBoundingClientRect();
+    const box = hostEl.getBoundingClientRect();
+    // Der Tooltip ist um -50% verschoben, also die halbe Breite einrechnen,
+    // damit er an den Kartenraendern nicht heraussteht.
+    const halfWidth = tooltip.offsetWidth / 2;
+    const left = box.left - card.left + x;
+    const minLeft = Math.min(halfWidth + 4, card.width / 2);
+    const maxLeft = Math.max(card.width - halfWidth - 4, card.width / 2);
+    tooltip.style.left = `${Math.max(minLeft, Math.min(maxLeft, left))}px`;
+    tooltip.style.top = `${box.top - card.top + y - 10}px`;
+    tooltip.classList.add('visible');
+  }
+
+  const hideTooltip = (tooltip) => tooltip.classList.remove('visible');
+
+  function renderEmpty(hostEl, message) {
+    hostEl.innerHTML = `<p class="chart-empty">${esc(message)}</p>`;
+  }
+
+  function gridAndAxis(ticks, scaleY, width, formatTick) {
+    let out = '';
+    for (const tick of ticks) {
+      const y = scaleY(tick);
+      out += `<line class="grid-line" x1="${PAD.left}" y1="${y}" x2="${width - PAD.right}" y2="${y}" />`;
+      out += `<text class="axis-text end" x="${PAD.left - 8}" y="${y + 4}">${esc(formatTick(tick))}</text>`;
+    }
+    return out;
+  }
+
+  /**
+   * Saeulendiagramm mit einer Serie.
+   * items: [{ label, value, tooltip }]
+   */
+  function drawColumns(hostEl, items, options = {}) {
+    const { height = 200, formatTick = String, labelEvery = 1, dimWhenZero = false } = options;
+    if (!items.length) return renderEmpty(hostEl, 'Keine Daten im gewählten Zeitraum.');
+
+    const width = Math.max(260, hostEl.clientWidth || 320);
+    const plotH = height - PAD.top - PAD.bottom;
+    const plotW = width - PAD.left - PAD.right;
+    const maxValue = Math.max(...items.map((it) => it.value), 0);
+    const { max, ticks } = niceCountTicks(maxValue);
+    const scaleY = (v) => PAD.top + plotH - (v / max) * plotH;
+
+    const band = plotW / items.length;
+    const barW = Math.max(3, Math.min(MAX_BAR, band - BAR_GAP));
+    const radius = Math.min(4, barW / 2);
+
+    let bars = '';
+    let hits = '';
+    items.forEach((item, i) => {
+      const cx = PAD.left + band * i + band / 2;
+      const x = cx - barW / 2;
+      const y = scaleY(item.value);
+      const h = PAD.top + plotH - y;
+      const cls = dimWhenZero && !item.value ? 'bar dim' : 'bar';
+      // Oben abgerundet, an der Grundlinie eckig.
+      bars += h <= radius
+        ? `<rect data-bar="${i}" x="${x}" y="${PAD.top + plotH - Math.max(h, 1)}" width="${barW}" height="${Math.max(h, 1)}" class="${cls}" />`
+        : `<path data-bar="${i}" class="${cls}" d="M${x} ${PAD.top + plotH} V${y + radius} a${radius} ${radius} 0 0 1 ${radius} -${radius} h${barW - radius * 2} a${radius} ${radius} 0 0 1 ${radius} ${radius} V${PAD.top + plotH} Z" />`;
+
+      const hitW = Math.max(MIN_HIT, band);
+      hits += `<rect class="hit" x="${cx - hitW / 2}" y="${PAD.top}" width="${hitW}" height="${plotH}" tabindex="0" role="img"
+                 aria-label="${esc(item.aria || `${item.label}: ${item.value}`)}"
+                 data-x="${cx}" data-y="${y}" data-idx="${i}" data-tip="${esc(item.tooltip)}" />`;
+    });
+    // Trefferflaechen liegen ueber den Balken, sonst faengt der Balken den Hover ab.
+    const marks = bars + hits;
+
+    let labels = '';
+    items.forEach((item, i) => {
+      if (i % labelEvery !== 0 && i !== items.length - 1) return;
+      const cx = PAD.left + band * i + band / 2;
+      labels += `<text class="axis-text mid" x="${cx}" y="${height - PAD.bottom + 18}">${esc(item.label)}</text>`;
+    });
+
+    hostEl.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="group">
+      ${gridAndAxis(ticks, scaleY, width, formatTick)}
+      ${marks}
+      ${labels}
+    </svg>`;
+
+    bindHover(hostEl);
+  }
+
+  /**
+   * Median-Linie mit Kürzeste–Längste-Band (eine Farbfamilie, zwei Elemente).
+   */
+  function drawDurationTrend(hostEl, days) {
+    if (!days.length) return renderEmpty(hostEl, 'Keine Daten im gewählten Zeitraum.');
+
+    const height = 230;
+    const width = Math.max(260, hostEl.clientWidth || 320);
+    const plotH = height - PAD.top - PAD.bottom;
+    const plotW = width - PAD.left - PAD.right;
+    const maxValue = Math.max(...days.map((d) => d.longest_sec || 0), 0);
+    const { max, ticks } = niceTimeTicks(maxValue);
+    const scaleY = (v) => PAD.top + plotH - (Math.min(v, max) / max) * plotH;
+    const scaleX = days.length === 1
+      ? () => PAD.left + plotW / 2
+      : (i) => PAD.left + (plotW * i) / (days.length - 1);
+
+    const top = days.map((d, i) => `${scaleX(i)},${scaleY(d.longest_sec || 0)}`);
+    const bottom = days.map((d, i) => `${scaleX(i)},${scaleY(d.fastest_sec || 0)}`).reverse();
+    const bandPath = `<polygon class="band" points="${top.concat(bottom).join(' ')}" />`;
+
+    const linePoints = days.map((d, i) => `${scaleX(i)},${scaleY(d.median_sec || 0)}`).join(' ');
+    const linePath = `<polyline class="line" points="${linePoints}" />`;
+
+    const lastIndex = days.length - 1;
+    const endDot = `<circle class="dot" cx="${scaleX(lastIndex)}" cy="${scaleY(days[lastIndex].median_sec || 0)}" r="4" />`;
+    // Einziges direktes Label: der aktuelle Median am Linienende.
+    const endLabel = `<text class="axis-text end" x="${scaleX(lastIndex) - 8}" y="${scaleY(days[lastIndex].median_sec || 0) - 10}">${esc(formatDuration(days[lastIndex].median_sec))}</text>`;
+
+    const labelEvery = Math.max(1, Math.ceil(days.length / Math.max(2, Math.floor(plotW / 58))));
+    let labels = '';
+    let hits = '';
+    days.forEach((day, i) => {
+      const x = scaleX(i);
+      if (i % labelEvery === 0 || i === lastIndex) {
+        labels += `<text class="axis-text mid" x="${x}" y="${height - PAD.bottom + 18}">${esc(formatDayShort(day.date))}</text>`;
       }
-      return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-    }
+      const hitW = Math.max(MIN_HIT, plotW / days.length);
+      const tip = `<div class="t-label">${esc(formatDayLong(day.date))}</div>`
+        + `<div>Median <b>${esc(formatDuration(day.median_sec))}</b></div>`
+        + `<div>Kürzeste <b>${esc(formatDuration(day.fastest_sec))}</b></div>`
+        + `<div>Längste <b>${esc(formatDuration(day.longest_sec))}</b></div>`
+        + `<div>Sessions <b>${day.count}</b></div>`;
+      hits += `<rect class="hit" x="${x - hitW / 2}" y="${PAD.top}" width="${hitW}" height="${plotH}" tabindex="0" role="img"
+                aria-label="${esc(`${formatDayLong(day.date)}: Median ${formatDuration(day.median_sec)}, ${day.count} Sessions`)}"
+                data-x="${x}" data-y="${scaleY(day.median_sec || 0)}" data-tip="${esc(tip)}" data-cross="1" />`;
+    });
 
-    function formatTime(isoUtc) {
-      if (!isoUtc) return '–';
-      const date = new Date(isoUtc);
-      return date.toLocaleString('de-DE', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      });
-    }
+    hostEl.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="group">
+      ${gridAndAxis(ticks, scaleY, width, formatDurationShort)}
+      ${bandPath}${linePath}${endDot}${endLabel}
+      <line class="crosshair" id="crosshair" x1="0" y1="${PAD.top}" x2="0" y2="${PAD.top + plotH}" style="display:none" />
+      ${hits}
+      ${labels}
+    </svg>`;
 
-    function showDaysView() {
-      sessionsViewEl.classList.remove('active');
-      daysViewEl.classList.add('active');
-      loadDays();
-    }
+    bindHover(hostEl);
+  }
 
-    function showSessionsView(date) {
-      daysViewEl.classList.remove('active');
-      sessionsViewEl.classList.add('active');
-      sessionsTitleEl.textContent = `Sessions am ${date}`;
-      loadSessions(date);
-    }
+  // Ein Hover-/Fokus-Handler fuer alle Charts (Delegation auf dem SVG).
+  function bindHover(hostEl) {
+    const tooltip = chartHost(hostEl);
+    const svg = hostEl.querySelector('svg');
+    if (!svg) return;
+    const crosshair = svg.querySelector('#crosshair');
 
-    async function loadDays() {
-      try {
-        const response = await fetch(addonUrl('/api/admin/days'));
-        if (!response.ok) return;
-        const data = await response.json();
-        const days = data.days || [];
+    const clearActive = () => {
+      for (const bar of svg.querySelectorAll('.bar.active')) bar.classList.remove('active');
+    };
 
-        daysBodyEl.innerHTML = '';
-        daysEmptyEl.style.display = days.length ? 'none' : 'block';
+    const activate = (target) => {
+      const x = Number(target.dataset.x);
+      const y = Number(target.dataset.y);
+      const rect = svg.getBoundingClientRect();
+      const scale = rect.width / svg.viewBox.baseVal.width;
+      showTooltip(hostEl, tooltip, x * scale, y * scale, target.dataset.tip);
 
-        for (const day of days) {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${day.date}</td>
-            <td>${formatDuration(day.fastest_sec)}</td>
-            <td>${formatDuration(day.median_sec)}</td>
-            <td>${formatDuration(day.longest_sec)}</td>
-            <td>${day.count}</td>
-          `;
-          tr.addEventListener('click', () => showSessionsView(day.date));
-          daysBodyEl.appendChild(tr);
-        }
-      } catch (err) {
-        // Fehler beim Laden werden bei erneutem Aufruf automatisch behoben
+      clearActive();
+      if (target.dataset.idx != null) {
+        const bar = svg.querySelector(`[data-bar="${target.dataset.idx}"]`);
+        if (bar) bar.classList.add('active');
       }
-    }
-
-    async function loadSessions(date) {
-      try {
-        const response = await fetch(addonUrl(`/api/admin/days/${date}/sessions`));
-        if (!response.ok) return;
-        const data = await response.json();
-        const sessions = data.sessions || [];
-
-        sessionsBodyEl.innerHTML = '';
-        sessionsEmptyEl.style.display = sessions.length ? 'none' : 'block';
-
-        for (const session of sessions) {
-          const tr = document.createElement('tr');
-          const startCell = document.createElement('td');
-          startCell.textContent = formatTime(session.started_at);
-          const endCell = document.createElement('td');
-          endCell.textContent = formatTime(session.ended_at);
-          const durationCell = document.createElement('td');
-          durationCell.textContent = formatDuration(session.duration_sec);
-          const actionCell = document.createElement('td');
-          const deleteBtn = document.createElement('button');
-          deleteBtn.className = 'delete-btn';
-          deleteBtn.textContent = 'Löschen';
-          deleteBtn.addEventListener('click', async (event) => {
-            event.stopPropagation();
-            if (!confirm('Diese Session wirklich löschen?')) return;
-            const deleteResponse = await fetch(addonUrl(`/api/admin/sessions/${session.id}`), { method: 'DELETE' });
-            if (deleteResponse.ok) {
-              await loadSessions(date);
-            }
-          });
-          actionCell.appendChild(deleteBtn);
-
-          tr.appendChild(startCell);
-          tr.appendChild(endCell);
-          tr.appendChild(durationCell);
-          tr.appendChild(actionCell);
-          sessionsBodyEl.appendChild(tr);
-        }
-      } catch (err) {
-        // Fehler beim Laden werden bei erneutem Aufruf automatisch behoben
+      if (crosshair && target.dataset.cross) {
+        crosshair.setAttribute('x1', x);
+        crosshair.setAttribute('x2', x);
+        crosshair.style.display = '';
       }
+    };
+
+    const deactivate = () => {
+      hideTooltip(tooltip);
+      clearActive();
+      if (crosshair) crosshair.style.display = 'none';
+    };
+
+    svg.addEventListener('pointermove', (event) => {
+      const hit = event.target.closest('.hit');
+      if (hit) activate(hit); else deactivate();
+    });
+    svg.addEventListener('pointerleave', deactivate);
+    svg.addEventListener('focusin', (event) => {
+      if (event.target.classList.contains('hit')) activate(event.target);
+    });
+    svg.addEventListener('focusout', deactivate);
+  }
+
+  /* ---------------- Kennzahlen ---------------- */
+
+  function renderTiles(stats) {
+    const t = stats.totals;
+    const today = stats.today;
+
+    // Drei tragende Kennzahlen: Umfang, typische Dauer, investierte Zeit.
+    const kpis = [
+      { label: 'Sessions gesamt', value: String(t.count), hint: `${t.days} Tag${t.days === 1 ? '' : 'e'} aufgezeichnet`, hero: true },
+      { label: 'Median', value: formatDuration(t.median_sec), hint: 'über alle Sessions' },
+      { label: 'Gesamtzeit', value: formatTotal(t.total_sec), hint: 'auf dem Thron' },
+    ];
+
+    // Ergänzende Kennzahlen: kleiner, ohne eigene Box.
+    const stats2 = [
+      { label: 'Heute', value: String(today.count), hint: today.count ? `Median ${formatDuration(today.median_sec)}` : 'noch nichts los' },
+      { label: 'Ø pro Tag', value: String(t.avg_per_day), hint: t.busiest_date ? `Spitze ${formatDayShort(t.busiest_date)} (${t.busiest_count})` : '' },
+      { label: 'Kürzeste', value: formatDuration(t.fastest_sec), hint: 'Rekord aller Zeiten' },
+      { label: 'Längste', value: formatDuration(t.longest_sec), hint: 'Rekord aller Zeiten' },
+    ];
+
+    kpiRowEl.innerHTML = kpis.map((kpi) => `
+      <div class="kpi${kpi.hero ? ' hero' : ''}">
+        <span class="kpi-label">${esc(kpi.label)}</span>
+        <span class="kpi-value">${esc(kpi.value)}</span>
+        ${kpi.hint ? `<span class="kpi-hint">${esc(kpi.hint)}</span>` : ''}
+      </div>
+    `).join('');
+
+    statRowEl.innerHTML = stats2.map((stat) => `
+      <div class="stat">
+        <span class="stat-label">${esc(stat.label)}</span>
+        <span class="stat-value">${esc(stat.value)}</span>
+        ${stat.hint ? `<span class="stat-hint">${esc(stat.hint)}</span>` : ''}
+      </div>
+    `).join('');
+  }
+
+  /* ---------------- Charts aus den Stats ---------------- */
+
+  function renderCharts() {
+    if (!statsCache) return;
+    const daily = statsCache.daily || [];
+
+    $('sessionsPerDayHint').textContent = daily.length
+      ? `${daily.reduce((sum, d) => sum + d.count, 0)} Sessions in ${daily.length} Tagen`
+      : '';
+
+    const perDayLabelEvery = Math.max(1, Math.ceil(daily.length / Math.max(2, Math.floor((($('chartPerDay').clientWidth || 320) - PAD.left - PAD.right) / 46))));
+    drawColumns($('chartPerDay'), daily.map((day) => ({
+      label: formatDayShort(day.date),
+      value: day.count,
+      aria: `${formatDayLong(day.date)}: ${day.count} Sessions`,
+      tooltip: `<div class="t-label">${esc(formatDayLong(day.date))}</div><div>Sessions <b>${day.count}</b></div><div>Median <b>${esc(formatDuration(day.median_sec))}</b></div>`,
+    })), { height: 200, labelEvery: perDayLabelEvery });
+
+    drawDurationTrend($('chartDuration'), daily);
+
+    drawColumns($('chartHour'), (statsCache.by_hour || []).map((entry) => ({
+      label: String(entry.hour).padStart(2, '0'),
+      value: entry.count,
+      aria: `${entry.hour} Uhr: ${entry.count} Sessions`,
+      tooltip: `<div class="t-label">${String(entry.hour).padStart(2, '0')}:00 – ${String(entry.hour).padStart(2, '0')}:59</div><div>Sessions <b>${entry.count}</b></div>${entry.count ? `<div>Median <b>${esc(formatDuration(entry.median_sec))}</b></div>` : ''}`,
+    })), { height: 190, labelEvery: 3, dimWhenZero: true });
+
+    drawColumns($('chartWeekday'), (statsCache.by_weekday || []).map((entry) => ({
+      label: WEEKDAYS[entry.weekday],
+      value: entry.count,
+      aria: `${WEEKDAYS[entry.weekday]}: ${entry.count} Sessions`,
+      tooltip: `<div class="t-label">${WEEKDAYS[entry.weekday]}</div><div>Sessions <b>${entry.count}</b></div>${entry.count ? `<div>Median <b>${esc(formatDuration(entry.median_sec))}</b></div>` : ''}`,
+    })), { height: 190, dimWhenZero: true });
+
+    const histogram = statsCache.histogram || [];
+    const histTotal = histogram.reduce((sum, bucket) => sum + bucket.count, 0);
+    drawColumns($('chartHistogram'), histogram.map((bucket) => ({
+      label: bucket.label,
+      value: bucket.count,
+      aria: `${bucket.label}: ${bucket.count} Sessions`,
+      tooltip: `<div class="t-label">${esc(bucket.label)}</div><div>Sessions <b>${bucket.count}</b></div>${histTotal ? `<div><b>${Math.round((bucket.count / histTotal) * 100)}%</b> aller Sessions</div>` : ''}`,
+    })), { height: 190, dimWhenZero: true });
+  }
+
+  /* ---------------- Laden ---------------- */
+
+  async function fetchJson(path) {
+    const response = await fetch(addonUrl(path));
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+  }
+
+  async function loadDashboard() {
+    try {
+      statsCache = await fetchJson(`/api/admin/stats?days=${rangeDays}`);
+      renderTiles(statsCache);
+      renderCharts();
+    } catch (err) {
+      // Beim naechsten Aufruf wird erneut geladen.
     }
+    loadDays();
+  }
 
-    backButtonEl.addEventListener('click', showDaysView);
+  async function loadDays() {
+    try {
+      const { days = [] } = await fetchJson('/api/admin/days');
+      daysEmptyEl.hidden = days.length > 0;
+      daysBodyEl.innerHTML = days.map((day) => `
+        <tr data-clickable data-date="${esc(day.date)}" tabindex="0">
+          <td data-label="Datum">${esc(formatDayLong(day.date))}</td>
+          <td data-label="Kürzeste">${esc(formatDuration(day.fastest_sec))}</td>
+          <td data-label="Median">${esc(formatDuration(day.median_sec))}</td>
+          <td data-label="Längste">${esc(formatDuration(day.longest_sec))}</td>
+          <td data-label="Sessions">${day.count}</td>
+        </tr>
+      `).join('');
+    } catch (err) {
+      // stiller Fehler, naechster Aufruf laedt erneut
+    }
+  }
 
-    showDaysView();
+  async function loadSessions(date) {
+    try {
+      const { sessions = [] } = await fetchJson(`/api/admin/days/${encodeURIComponent(date)}/sessions`);
+      sessionsEmptyEl.hidden = sessions.length > 0;
+      sessionsBodyEl.innerHTML = sessions.map((session) => `
+        <tr>
+          <td data-label="Start">${esc(formatTime(session.started_at))}</td>
+          <td data-label="Ende">${esc(formatTime(session.ended_at))}</td>
+          <td data-label="Dauer">${esc(formatDuration(session.duration_sec))}</td>
+          <td class="actions"><button class="delete-btn" type="button" data-delete="${session.id}">Löschen</button></td>
+        </tr>
+      `).join('');
+    } catch (err) {
+      // stiller Fehler
+    }
+  }
+
+  /* ---------------- Navigation ---------------- */
+
+  function showDashboard() {
+    sessionsViewEl.classList.remove('active');
+    dashboardViewEl.classList.add('active');
+    loadDashboard();
+  }
+
+  function showSessions(date) {
+    dashboardViewEl.classList.remove('active');
+    sessionsViewEl.classList.add('active');
+    sessionsTitleEl.textContent = `Sessions am ${formatDayLong(date)}`;
+    sessionsViewEl.dataset.date = date;
+    loadSessions(date);
+  }
+
+  daysBodyEl.addEventListener('click', (event) => {
+    const row = event.target.closest('tr[data-date]');
+    if (row) showSessions(row.dataset.date);
+  });
+
+  daysBodyEl.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const row = event.target.closest('tr[data-date]');
+    if (row) { event.preventDefault(); showSessions(row.dataset.date); }
+  });
+
+  sessionsBodyEl.addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-delete]');
+    if (!button) return;
+    if (!confirm('Diese Session wirklich löschen?')) return;
+    const response = await fetch(addonUrl(`/api/admin/sessions/${button.dataset.delete}`), { method: 'DELETE' });
+    if (response.ok) loadSessions(sessionsViewEl.dataset.date);
+  });
+
+  rangeFilterEl.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-days]');
+    if (!button) return;
+    rangeDays = Number(button.dataset.days);
+    for (const other of rangeFilterEl.querySelectorAll('button')) {
+      other.setAttribute('aria-pressed', String(other === button));
+    }
+    loadDashboard();
+  });
+
+  $('backButton').addEventListener('click', showDashboard);
+
+  // Charts folgen der Containerbreite statt einer festen Groesse.
+  let resizeTimer = null;
+  const scheduleRerender = () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(renderCharts, 120);
+  };
+  if ('ResizeObserver' in window) {
+    new ResizeObserver(scheduleRerender).observe(document.querySelector('main'));
+  } else {
+    window.addEventListener('resize', scheduleRerender);
+  }
+
+  showDashboard();
+  setInterval(() => { if (dashboardViewEl.classList.contains('active')) loadDashboard(); }, 60000);
   </script>
 </body>
 </html>

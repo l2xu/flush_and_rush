@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>flush_and_rush</title>
   <style>
     :root {
@@ -18,6 +18,8 @@
       --fastest-color: #34d399;
       --median-color: #fbbf24;
       --longest-color: #f87171;
+      /* wird aus /api/guest/config (Option fade_duration_ms) gesetzt */
+      --fade-duration: 600ms;
     }
 
     * { box-sizing: border-box; }
@@ -30,6 +32,7 @@
       background: var(--bg);
       color: var(--text);
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-text-size-adjust: 100%;
     }
 
     .app {
@@ -37,21 +40,26 @@
       flex-direction: column;
       width: 100%;
       height: 100vh;
+      height: 100dvh; /* mobile Browser mit ein-/ausblendender Leiste */
     }
 
     .timer-half {
-      height: 50vh;
+      flex: 1 1 50%;
+      min-height: 0;
       display: grid;
       place-items: center;
       gap: 12px;
+      padding: 0 4vw;
       text-align: center;
       background:
         radial-gradient(circle at top, rgba(125, 211, 252, 0.16), transparent 32%),
         var(--bg);
     }
 
+    /* Groesse folgt der kleineren Dimension, damit die Zeit nie ueber den
+       Bildrand laeuft - auch nicht im Hochformat oder mit Stundenanzeige. */
     #timer {
-      font-size: 33vh;
+      font-size: min(33vh, 30vw);
       line-height: 0.9;
       font-weight: 900;
       letter-spacing: -0.06em;
@@ -59,14 +67,19 @@
       color: var(--timer-color);
       text-shadow: 0 0 60px color-mix(in srgb, var(--timer-color) 45%, transparent);
       transition: color 500ms ease, text-shadow 500ms ease;
+      white-space: nowrap;
     }
 
+    /* hh:mm:ss braucht rund 60% mehr Breite als mm:ss */
+    #timer.with-hours { font-size: min(28vh, 19vw); }
+
     .progress-half {
-      height: 50vh;
+      flex: 1 1 50%;
+      min-height: 0;
       display: flex;
       flex-direction: column;
       justify-content: center;
-      padding: 0 6vw;
+      padding: 0 clamp(16px, 6vw, 90px);
       transition: opacity 300ms ease;
     }
 
@@ -77,13 +90,13 @@
 
     .track-wrapper {
       position: relative;
-      padding-top: 58px;
+      padding-top: clamp(46px, 7vh, 62px);
     }
 
     .marker {
       position: absolute;
       top: 0;
-      height: 58px;
+      height: clamp(46px, 7vh, 62px);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -95,10 +108,15 @@
     }
 
     .marker-label {
-      font-size: 0.8rem;
+      font-size: clamp(0.62rem, 1.5vw, 0.85rem);
       font-weight: 700;
       white-space: nowrap;
     }
+
+    /* Aussen liegende Marker nach innen ziehen, damit die Beschriftung
+       nicht ueber den Bildrand rutscht. */
+    .marker[data-edge="start"] { transform: translateX(-12%); }
+    .marker[data-edge="end"] { transform: translateX(-88%); }
 
     .marker-icon {
       width: 0;
@@ -115,8 +133,8 @@
 
     .progress-track {
       position: relative;
-      height: 44px;
-      border-radius: 22px;
+      height: clamp(26px, 5.5vh, 48px);
+      border-radius: 999px;
       background: var(--track-bg);
       overflow: hidden;
       box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
@@ -125,7 +143,7 @@
     .progress-fill {
       height: 100%;
       width: 0%;
-      border-radius: 22px;
+      border-radius: 999px;
       background: linear-gradient(90deg, var(--green), var(--timer-color));
       transition: width 250ms linear;
     }
@@ -150,7 +168,7 @@
       background: var(--bg);
       opacity: 0;
       pointer-events: none;
-      transition: opacity 500ms ease;
+      transition: opacity var(--fade-duration) ease;
       z-index: 40;
     }
 
@@ -170,7 +188,7 @@
         var(--bg);
       opacity: 0;
       pointer-events: none;
-      transition: opacity 500ms ease;
+      transition: opacity var(--fade-duration) ease;
       z-index: 30;
     }
 
@@ -179,26 +197,17 @@
       pointer-events: auto;
     }
 
+    /* Spaltenzahl folgt der verfuegbaren Breite statt der Orientierung:
+       drei nebeneinander, sobald es passt, sonst automatisch umbrechen. */
     .metrics-grid {
       width: min(1100px, 100%);
       display: grid;
-      gap: clamp(14px, 2vw, 24px);
-    }
-
-    @media (orientation: landscape) {
-      .metrics-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-      }
-    }
-
-    @media (orientation: portrait) {
-      .metrics-grid {
-        grid-template-columns: minmax(0, 1fr);
-      }
+      gap: clamp(12px, 2vw, 24px);
+      grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
     }
 
     .metric-card {
-      min-height: 180px;
+      min-height: clamp(120px, 22vh, 190px);
       display: grid;
       align-content: center;
       justify-items: center;
@@ -234,18 +243,24 @@
     .metric-card.longest .metric-value { color: var(--longest-color); }
 
     #resultDuration {
-      font-size: clamp(4rem, 16vw, 9rem);
+      font-size: min(clamp(3rem, 16vw, 9rem), 22vh);
       font-weight: 900;
       letter-spacing: -0.05em;
       font-variant-numeric: tabular-nums;
       color: var(--text);
+      white-space: nowrap;
     }
 
     #resultMessage {
-      font-size: clamp(1.3rem, 4vw, 2.2rem);
+      font-size: min(clamp(1.1rem, 4vw, 2.2rem), 7vh);
       font-weight: 800;
       color: var(--timer-color);
-      max-width: 90vw;
+      max-width: min(90vw, 900px);
+      text-wrap: balance;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { transition-duration: 1ms !important; animation-duration: 1ms !important; }
     }
   </style>
 </head>
@@ -313,7 +328,9 @@
     function getAppBasePath() {
       const trimmedPath = window.location.pathname.replace(/\/+$/, '');
       if (!trimmedPath) return '';
-      if (trimmedPath.endsWith('/guest')) return trimmedPath.slice(0, -'/guest'.length);
+      for (const suffix of ['/guest', '/admin']) {
+        if (trimmedPath.endsWith(suffix)) return trimmedPath.slice(0, -suffix.length);
+      }
       return trimmedPath;
     }
 
@@ -335,6 +352,25 @@
         return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
       }
       return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+
+    // Stundenanzeige braucht eine kleinere Schrift, sonst laeuft sie seitlich raus.
+    function setTimerText(text) {
+      timerEl.textContent = text;
+      timerEl.classList.toggle('with-hours', text.length > 5);
+    }
+
+    async function loadGuestConfig() {
+      try {
+        const response = await fetch(addonUrl('/api/guest/config'));
+        if (!response.ok) return;
+        const config = await response.json();
+        if (config.fade_duration_ms) {
+          rootStyle.setProperty('--fade-duration', `${config.fade_duration_ms}ms`);
+        }
+      } catch (err) {
+        // Standardwert aus dem CSS bleibt bestehen
+      }
     }
 
     // --- Konfetti: leichtgewichtige Canvas-Partikel-Animation ---
@@ -479,6 +515,10 @@
         const { marker, label } = ensureMarker(def.key);
         const pct = Math.min(100, (def.value / scaleMaxSec) * 100);
         marker.style.left = `${pct}%`;
+        // Randnahe Marker werden nach innen versetzt (siehe [data-edge] im CSS).
+        if (pct <= 6) marker.dataset.edge = 'start';
+        else if (pct >= 94) marker.dataset.edge = 'end';
+        else delete marker.dataset.edge;
         label.textContent = `${def.label} (${formatDuration(def.value)})`;
       }
     }
@@ -529,7 +569,7 @@
     function tickRunning() {
       if (phase !== 'running' || sessionAnchorMs == null) return;
       const liveElapsedSec = (Date.now() - sessionAnchorMs) / 1000;
-      timerEl.textContent = formatDuration(liveElapsedSec);
+      setTimerText(formatDuration(liveElapsedSec));
       applyColor(liveElapsedSec);
       renderProgress(liveElapsedSec);
     }
@@ -563,7 +603,7 @@
       // idle
       phase = 'idle';
       sessionAnchorMs = null;
-      timerEl.textContent = '00:00';
+      setTimerText('00:00');
       renderProgress(0);
 
       if (data.last_finished) {
@@ -611,6 +651,7 @@
     }
 
     (async () => {
+      loadGuestConfig();
       setInterval(tickRunning, 200);
       connectWebSocket();
     })();
