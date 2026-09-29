@@ -1,8 +1,8 @@
 name: "Flush & Rush"
-description: "Gamification fuer das Gaeste-WC: Sitzungen tracken, claimen und im Leaderboard anzeigen."
+description: "Gamification fuer das Klo"
 version: "0.4.2"
 slug: "flush-and-rush"
-url: "https://example.com/flush-and-rush"
+url: "https://github.com/l2xu/flush_and_rush"
 init: false
 startup: services
 boot: auto
